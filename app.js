@@ -47,13 +47,21 @@ async function boot() {
     Object.assign(S, demoData());
     return render();
   }
-  const { data } = await sb.auth.getSession();
-  S.user = data.session?.user ?? null;
-  sb.auth.onAuthStateChange((_e, session) => {
+  // El enlace de "olvidé mi contraseña" llega con type=recovery en la URL.
+  S.recovering = /type=recovery/.test(location.hash + location.search);
+  let ready = false;
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === "PASSWORD_RECOVERY") S.recovering = true;
     const changed = (session?.user?.id ?? null) !== (S.user?.id ?? null);
     S.user = session?.user ?? null;
+    if (!ready) return;
+    if (S.recovering) return renderNewPassword();
     if (changed) start();
   });
+  const { data } = await sb.auth.getSession();
+  S.user = data.session?.user ?? null;
+  ready = true;
+  if (S.recovering && S.user) return renderNewPassword();
   start();
 }
 
@@ -118,11 +126,18 @@ function renderAuth(mode = "login") {
         <button class="btn primary">${mode === "login" ? "Entrar" : "Registrarme"}</button>
       </form>
       <p class="muted" style="margin-bottom:0">
-        ${mode === "login" ? `¿No tienes cuenta? <a href="#" id="swap">Regístrate</a>` : `¿Ya tienes cuenta? <a href="#" id="swap">Entrar</a>`}
+        ${mode === "login" ? `¿No tienes cuenta? <a href="#" id="swap">Regístrate</a> · <a href="#" id="forgot">¿Olvidaste tu contraseña?</a>` : `¿Ya tienes cuenta? <a href="#" id="swap">Entrar</a>`}
       </p>
     </div>
   </div>`;
   $("#swap").onclick = (e) => { e.preventDefault(); renderAuth(mode === "login" ? "signup" : "login"); };
+  $("#forgot")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const email = $("#authForm [name=email]").value.trim();
+    if (!email) return toast("Escribe tu email arriba y vuelve a pulsar «¿Olvidaste tu contraseña?»", 5000);
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+    toast(error ? error.message : "Te enviamos un correo para crear una contraseña nueva", 7000);
+  });
   $("#authForm").onsubmit = async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
@@ -131,6 +146,32 @@ function renderAuth(mode = "login") {
       : await sb.auth.signUp({ email: f.email, password: f.password, options: { data: { full_name: f.name } } });
     if (r.error) return toast(r.error.message);
     if (mode === "signup" && !r.data.session) toast("Revisa tu email para confirmar la cuenta", 6000);
+  };
+}
+
+function renderNewPassword() {
+  $("#app").innerHTML = `
+  <div class="auth">
+    <div class="brand" style="font-size:22px;text-align:center;margin-bottom:16px">True Trader<span>X</span></div>
+    <div class="card">
+      <h2>Crea tu contraseña nueva</h2>
+      <form id="pwForm" class="grid">
+        <div><label>Contraseña nueva (mínimo 8 caracteres)</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
+        <div><label>Repítela</label><input name="password2" type="password" minlength="8" required autocomplete="new-password"></div>
+        <button class="btn primary">Guardar contraseña</button>
+      </form>
+    </div>
+  </div>`;
+  $("#pwForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target));
+    if (f.password !== f.password2) return toast("Las contraseñas no coinciden");
+    const { error } = await sb.auth.updateUser({ password: f.password });
+    if (error) return toast(error.message);
+    toast("Contraseña actualizada");
+    S.recovering = false;
+    history.replaceState(null, "", location.pathname);
+    start();
   };
 }
 
