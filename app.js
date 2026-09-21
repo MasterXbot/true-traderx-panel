@@ -118,7 +118,7 @@ function subscribe() {
 function renderAuth(mode = "login") {
   $("#app").innerHTML = `
   <div class="auth">
-    <div class="brand brand-lg"><img src="logo.svg" alt="Master X" class="logo">True Trader<span>X</span></div>
+    <div class="brand brand-lg"><img src="logo.svg" alt="Master X" class="logo"><b class="brand-name">True Trader<span>X</span></b></div>
     <div class="card">
       <h2>${mode === "login" ? "Entrar" : "Crear cuenta"}</h2>
       <form id="authForm" class="grid">
@@ -165,7 +165,7 @@ function authError(msg = "") {
 function renderNewPassword() {
   $("#app").innerHTML = `
   <div class="auth">
-    <div class="brand brand-lg"><img src="logo.svg" alt="Master X" class="logo">True Trader<span>X</span></div>
+    <div class="brand brand-lg"><img src="logo.svg" alt="Master X" class="logo"><b class="brand-name">True Trader<span>X</span></b></div>
     <div class="card">
       <h2>Crea tu contraseña nueva</h2>
       <form id="pwForm" class="grid">
@@ -199,7 +199,7 @@ function render() {
 
   $("#app").innerHTML = `
   <header class="top">
-    <div class="brand"><img src="logo.svg" alt="Master X" class="logo">True Trader<span>X</span></div>
+    <div class="brand"><img src="logo.svg" alt="Master X" class="logo"><b class="brand-name">True Trader<span>X</span></b></div>
     <nav class="tabs">${tabs.map(([k, v]) => `<button data-tab="${k}" class="${S.tab === k ? "active" : ""}">${v}</button>`).join("")}</nav>
     <div class="spacer"></div>
     ${DEMO ? `<span class="badge">DEMO</span>` : ""}
