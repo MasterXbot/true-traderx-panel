@@ -1,5 +1,5 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609210020";
 
 // Si config.js no está configurado, el panel arranca en MODO DEMO con datos de ejemplo.
 const DEMO = SUPABASE_URL.includes("TU-PROYECTO");
@@ -136,7 +136,7 @@ function renderAuth(mode = "login") {
     const email = $("#authForm [name=email]").value.trim();
     if (!email) return toast("Escribe tu email arriba y vuelve a pulsar «¿Olvidaste tu contraseña?»", 5000);
     const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-    toast(error ? error.message : "Te enviamos un correo para crear una contraseña nueva", 7000);
+    toast(error ? authError(error.message) : "Te enviamos un correo para crear una contraseña nueva (revisa también spam)", 8000);
   });
   $("#authForm").onsubmit = async (e) => {
     e.preventDefault();
@@ -144,9 +144,20 @@ function renderAuth(mode = "login") {
     const r = mode === "login"
       ? await sb.auth.signInWithPassword({ email: f.email, password: f.password })
       : await sb.auth.signUp({ email: f.email, password: f.password, options: { data: { full_name: f.name } } });
-    if (r.error) return toast(r.error.message);
+    if (r.error) return toast(authError(r.error.message), 7000);
     if (mode === "signup" && !r.data.session) toast("Revisa tu email para confirmar la cuenta", 6000);
   };
+}
+
+function authError(msg = "") {
+  const m = msg.toLowerCase();
+  if (m.includes("invalid login")) return "Correo o contraseña incorrectos. Si no la recuerdas, usa «¿Olvidaste tu contraseña?»";
+  if (m.includes("already registered") || m.includes("already been registered")) return "Ese correo ya tiene cuenta. Entra o usa «¿Olvidaste tu contraseña?»";
+  if (m.includes("rate limit") || m.includes("security purposes")) return "Demasiados intentos. Espera unos minutos y vuelve a intentarlo";
+  if (m.includes("not confirmed")) return "Tu correo aún no está confirmado: abre el enlace que te enviamos";
+  if (m.includes("same_password") || m.includes("different from the old")) return "La contraseña nueva debe ser distinta de la anterior";
+  if (m.includes("weak") || m.includes("at least")) return "Contraseña muy débil: usa al menos 8 caracteres con letras y números";
+  return msg;
 }
 
 function renderNewPassword() {
@@ -167,7 +178,7 @@ function renderNewPassword() {
     const f = Object.fromEntries(new FormData(e.target));
     if (f.password !== f.password2) return toast("Las contraseñas no coinciden");
     const { error } = await sb.auth.updateUser({ password: f.password });
-    if (error) return toast(error.message);
+    if (error) return toast(authError(error.message), 7000);
     toast("Contraseña actualizada");
     S.recovering = false;
     history.replaceState(null, "", location.pathname);
