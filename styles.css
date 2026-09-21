@@ -101,7 +101,7 @@ tr.clickable:hover td { background: var(--panel-2); }
 .timeline { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; font-size: 12px; }
 .timeline li { display: grid; grid-template-columns: 60px 1fr; gap: 8px; padding: 5px 0; border-top: 1px dashed var(--line); }
 .timeline .k-entry { color: var(--blue); } .timeline .k-exit { color: var(--accent); } .timeline .k-stop { color: var(--green); }
-.timeline .k-warn { color: #fbbf24; } .timeline .k-error { color: var(--red); } .timeline .k-partial { color: var(--green); }
+.timeline .k-warn { color: #fbbf24; } .timeline .k-info { color: #a78bfa; } .timeline .k-error { color: var(--red); } .timeline .k-partial { color: var(--green); }
 
 .alert { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(239, 68, 68, .4); background: rgba(239, 68, 68, .08); margin-bottom: 16px; }
 .alert.info { border-color: rgba(56, 189, 248, .4); background: rgba(56, 189, 248, .08); }

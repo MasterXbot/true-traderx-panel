@@ -1,5 +1,5 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609210020";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609210045";
 
 // Si config.js no está configurado, el panel arranca en MODO DEMO con datos de ejemplo.
 const DEMO = SUPABASE_URL.includes("TU-PROYECTO");
@@ -192,7 +192,7 @@ function render() {
   S.charts = [];
   const st = S.settings ?? {};
   const isAdmin = S.profile?.role === "admin";
-  const tabs = [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["sig", "Señales"], ["cfg", "Configuración"]];
+  const tabs = [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["sig", "Señales"], ["ai", "Inteligencia"], ["cfg", "Configuración"]];
   if (isAdmin) tabs.push(["admin", "Admin"]);
 
   $("#app").innerHTML = `
@@ -224,7 +224,7 @@ function render() {
   if (st.last_error) banners.push(`<div class="alert">⚠ ${esc(st.last_error)}</div>`);
   if (!st.has_keys) banners.push(`<div class="alert info">Conecta tu broker en <b>Configuración</b> para que el bot pueda operar.</div>`);
   view.insertAdjacentHTML("beforeend", banners.join(""));
-  ({ panel: viewPanel, pos: viewPositions, hist: viewHistory, sig: viewSignals, cfg: viewConfig, admin: viewAdmin })[S.tab](view);
+  ({ panel: viewPanel, pos: viewPositions, hist: viewHistory, sig: viewSignals, ai: viewIntelligence, cfg: viewConfig, admin: viewAdmin })[S.tab](view);
 }
 
 async function toggleBot(on) {
@@ -363,8 +363,71 @@ function bindTradeRows(v) {
     const next = tr.nextElementSibling;
     if (next?.classList.contains("detail")) return next.remove();
     if (!S.events[id]) await loadEvents([id]);
-    tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="10">${timeline(S.events[id] ?? [])}</td></tr>`);
+    const t = S.trades.find((x) => x.id === id) ?? {};
+    tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="10">${tradeFacts(t)}${timeline(S.events[id] ?? [])}</td></tr>`);
   }));
+}
+
+function moneyTxt(t) {
+  if (t.moneyness_pct == null) return "";
+  const m = +t.moneyness_pct;
+  return m >= 0.05 ? `ITM ${m.toFixed(1)}%` : m <= -0.05 ? `OTM ${Math.abs(m).toFixed(1)}%` : "ATM";
+}
+
+function meter(v) {
+  const n = Math.max(0, Math.min(10, +v || 0));
+  const color = n >= 4 ? "var(--red)" : n >= 2 ? "var(--accent)" : "var(--green)";
+  return `<span title="${n}/10" style="display:inline-block;width:90px;height:8px;background:var(--panel-2);border-radius:8px;overflow:hidden;vertical-align:middle">
+    <i style="display:block;height:100%;width:${n * 10}%;background:${color}"></i></span><b class="num">${n}/10</b>`;
+}
+
+function tradeFacts(t) {
+  if (!t.id) return "";
+  const f = t.entry_features ?? {};
+  const facts = [
+    ["Contrato", `${moneyTxt(t) || "—"} · delta ${t.delta ?? "—"} · spread ${t.spread_pct ?? "—"}%`],
+    ["Recorrido", `MFE +${(+t.mfe_r || 0).toFixed(2)}R · MAE ${(+t.mae_r || 0).toFixed(2)}R`],
+    ["Prima", `máx ${(+t.max_option_pct || 0).toFixed(0)}% · mín ${(+t.min_option_pct || 0).toFixed(0)}%`],
+    ["Salida", `${esc(t.exit_agent ?? "—")}${t.left_on_table_r != null ? ` · quedó +${(+t.left_on_table_r).toFixed(2)}R después` : ""}`],
+    ["Contexto", `4H ${esc(f.bias4h ?? "—")} · vol ${f.vol_ratio ?? "—"}x · estirado ${f.stretch_atr ?? "—"} ATR · R:B ${f.rr ?? "—"}`],
+  ];
+  return `<div class="stats" style="margin:4px 0 8px">${facts.map(([k, v]) => `<div><small>${k}</small><b style="font-size:13px">${v}</b></div>`).join("")}</div>
+    ${t.lesson ? `<div class="alert info" style="margin:0 0 8px">🧠 ${esc(t.lesson)}</div>` : ""}`;
+}
+
+async function viewIntelligence(v) {
+  v.insertAdjacentHTML("beforeend", `
+  <section class="card">
+    <h2>Inteligencia del bot</h2>
+    <p class="muted">Los agentes vigilantes guardan cada movimiento de cada posición. Cada tarde el agente de aprendizaje resume los resultados
+    y el scanner los usa: sube el score de lo que funciona, lo baja en lo que falla y bloquea un setup en un activo si viene perdiendo
+    (necesita al menos 8 trades para opinar).</p>
+    <div id="aiStats" class="muted">Cargando…</div>
+  </section>
+  <section class="card"><h2>Lecciones recientes del analista</h2><div id="aiLessons"></div></section>`);
+  const lessons = S.trades.filter((t) => t.lesson).slice(0, 15);
+  $("#aiLessons").innerHTML = lessons.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Activo</th><th>Setup</th><th class="num">P&L</th><th class="num">MFE</th><th class="num">Dejado</th><th>Lección</th></tr></thead><tbody>
+    ${lessons.map((t) => `<tr><td>${etDay(t.opened_at)}</td><td><b>${esc(t.symbol)}</b></td><td>${esc(SETUPS[t.setup] ?? t.setup)}</td>
+      <td class="num ${cls(t.realized_pnl)}">${usd(t.realized_pnl)}</td><td class="num">+${(+t.mfe_r || 0).toFixed(2)}R</td>
+      <td class="num">${t.left_on_table_r != null ? "+" + (+t.left_on_table_r).toFixed(2) + "R" : "—"}</td>
+      <td style="white-space:normal;min-width:260px">${esc(t.lesson)}</td></tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty">Aún no hay trades analizados. El analista revisa cada cierre unos 45 minutos después.</div>`;
+  if (DEMO) return ($("#aiStats").innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  const { data } = await sb.from("strategy_stats").select("*").order("n", { ascending: false });
+  const titles = {
+    setup: "Por setup", symbol: "Por activo", hour: "Por hora (NY)", align4h: "Alineación con 4H", direction: "CALL vs PUT",
+    delta: "Por delta", spread: "Por spread", setup_symbol: "Setup × activo",
+  };
+  const groups = Object.keys(titles).map((dim) => [dim, (data ?? []).filter((r) => r.dimension === dim)]).filter(([, rows]) => rows.length);
+  $("#aiStats").innerHTML = groups.length
+    ? `<div class="grid cols-2">${groups.map(([dim, rows]) => `
+    <div><h3>${titles[dim]}</h3><div class="table-wrap"><table><thead><tr><th>Grupo</th><th class="num">Trades</th><th class="num">Win</th><th class="num">P&L medio</th><th class="num">Dejado</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td>${esc(SETUPS[r.key] ?? r.key.replace("|", " · "))}</td><td class="num">${r.n}</td>
+      <td class="num ${r.n >= 8 ? (r.win_rate >= 0.65 ? "pos" : r.win_rate < 0.4 ? "neg" : "") : "muted"}">${Math.round(r.win_rate * 100)}%</td>
+      <td class="num ${cls(r.avg_pnl)}">${usd(r.avg_pnl)}</td><td class="num">${r.avg_left_r != null ? "+" + (+r.avg_left_r).toFixed(2) + "R" : "—"}</td></tr>`).join("")}
+    </tbody></table></div></div>`).join("")}</div>`
+    : `<div class="empty">Todavía no hay trades cerrados para aprender. Las estadísticas se actualizan cada día a las 16:20 NY.</div>`;
 }
 
 function timeline(events) {
@@ -415,7 +478,9 @@ function posCard(t) {
       <div><small>Stop dinámico</small><b class="num">${(+t.stop_underlying).toFixed(2)}</b></div>
       <div><small>Progreso</small><b class="num ${cls(prog)}">${prog.toFixed(2)}R</b></div>
     </div>
-    <div class="muted" style="font-size:12px">${esc(SETUPS[t.setup] ?? t.setup)} · score ${t.score} · delta ${t.delta} · vence ${esc(t.expiry)} · ${stages[t.stage] ?? ""}</div>
+    <div class="muted" style="font-size:12px">${esc(SETUPS[t.setup] ?? t.setup)} · score ${t.score} · delta ${t.delta} · ${moneyTxt(t)} · spread ${t.spread_pct ?? "—"}% · vence ${esc(t.expiry)} · ${stages[t.stage] ?? ""}</div>
+    <div class="row" style="font-size:12px;margin-top:6px"><span class="muted">Agotamiento del movimiento</span>${meter(t.exhaustion_last ?? 0)}
+      <span class="muted">MFE +${(+t.mfe_r || 0).toFixed(2)}R · MAE ${(+t.mae_r || 0).toFixed(2)}R · prima máx ${(+t.max_option_pct || 0).toFixed(0)}%</span></div>
     <div class="bar" title="De -1R (stop inicial) a +3R">
       <i style="left:${pctOf(Math.min(stopR, prog))}%;width:${Math.abs(pctOf(prog) - pctOf(stopR))}%;background:${prog >= stopR ? "rgba(34,197,94,.5)" : "rgba(239,68,68,.5)"}"></i>
       <i style="left:calc(${pctOf(stopR)}% - 1px);width:3px;background:#f59e0b"></i>
@@ -508,14 +573,19 @@ function viewConfig(v) {
       ${num("max_trades_per_day", "Máx. trades por día", s.max_trades_per_day, 1, 50, 1)}
       ${num("daily_loss_limit_pct", "Pérdida diaria máx. (%)", s.daily_loss_limit_pct, 0.5, 100, 0.5)}
       ${num("option_stop_pct", "Stop de prima (%)", s.option_stop_pct, 5, 100, 1)}
-      ${num("delta_min", "Delta mínimo", s.delta_min, 0.05, 0.95, 0.01)}
-      ${num("delta_max", "Delta máximo", s.delta_max, 0.05, 0.95, 0.01)}
+      ${num("delta_min", "Delta mínimo (ATM ≈ 0.50)", s.delta_min, 0.05, 0.95, 0.01)}
+      ${num("delta_max", "Delta máximo (ligeramente ITM ≈ 0.60)", s.delta_max, 0.05, 0.95, 0.01)}
+      ${num("partial_r", "Asegurar 50% en +R (0 = dejar correr todo)", s.partial_r ?? 0.5, 0, 5, 0.25)}
       ${num("dte_min", "Vencimiento mín. (días)", s.dte_min, 0, 30, 1)}
       ${num("dte_max", "Vencimiento máx. (días)", s.dte_max, 0, 45, 1)}
       ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 50, 1)}
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
-      <div><label>&nbsp;</label><label class="check"><input type="checkbox" name="close_eod" ${s.close_eod ? "checked" : ""}> Cerrar todo a las 15:50 NY</label></div>
-      <div><label>&nbsp;</label><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch ? "checked" : ""}> No operar en almuerzo (11:30–13:30)</label></div>
+      <div style="grid-column:1/-1" class="alert info">
+        <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
+        no se abren trades en el almuerzo (11:30–13:30), ni en los primeros 15 minutos, ni después de las 15:15 ·
+        solo contratos ATM o hasta 3% ITM, semanales y con el menor spread · el 1H manda: si cambia de dirección se sale ·
+        el día del vencimiento se cierra a las 15:30.
+      </div>
       <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
         ${Object.entries(SETUPS).map(([k, n]) => `<label class="check"><input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}> ${n}</label>`).join("")}
       </div></div>
@@ -571,9 +641,9 @@ function viewConfig(v) {
     const fd = new FormData(e.target);
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
-      "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "min_score"]) patch[k] = Number(fd.get(k));
-    patch.close_eod = fd.get("close_eod") === "on";
-    patch.skip_lunch = fd.get("skip_lunch") === "on";
+      "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "min_score", "partial_r"]) patch[k] = Number(fd.get(k));
+    patch.close_eod = true;
+    patch.skip_lunch = true;
     patch.setups = fd.getAll("setup");
     if (patch.delta_min >= patch.delta_max) return toast("El delta mínimo debe ser menor que el máximo");
     if (patch.dte_min > patch.dte_max) return toast("Revisa el rango de vencimiento");
@@ -742,7 +812,7 @@ function demoData() {
     profile: { role: "admin", approved: true, full_name: "Demo" },
     settings: {
       enabled: true, mode: "paper", broker: "alpaca", has_keys: true, key_hint: "…DEMO", last_equity: 25340.12, alloc_pct: 5, max_contracts: 10,
-      max_open_positions: 3, max_trades_per_day: 4, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.4, delta_max: 0.5, dte_min: 5, dte_max: 10,
+      max_open_positions: 3, max_trades_per_day: 4, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.45, delta_max: 0.6, partial_r: 0.5, dte_min: 5, dte_max: 10,
       max_spread_pct: 12, min_score: 60, close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
     },
     trades,
