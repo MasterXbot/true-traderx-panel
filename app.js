@@ -1,5 +1,5 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609211255";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609211327";
 
 // Si config.js no está configurado, el panel arranca en MODO DEMO con datos de ejemplo.
 const DEMO = SUPABASE_URL.includes("TU-PROYECTO");
@@ -623,12 +623,14 @@ function viewConfig(v) {
       ${num("partial_r", "Asegurar 50% en +R (0 = dejar correr todo)", s.partial_r ?? 0.5, 0, 5, 0.25)}
       ${num("dte_min", "Vencimiento mín. (días)", s.dte_min, 0, 30, 1)}
       ${num("dte_max", "Vencimiento máx. (días)", s.dte_max, 0, 45, 1)}
-      ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 50, 1)}
+      ${num("max_spread_usd", "Spread máx. por contrato (US$)", s.max_spread_usd ?? 10, 1, 500, 1)}
+      ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 100, 1)}
+      <div><label>Tipo de orden al comprar/vender</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1" class="alert info">
         <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
         no se abren trades en el almuerzo (11:30–13:30), ni en los primeros 15 minutos, ni después de las 15:15 ·
-        solo contratos ATM o hasta 3% ITM, semanales y con el menor spread · el 1H manda: si cambia de dirección se sale ·
+        solo contratos ATM o hasta 3% ITM, semanales y con el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato) · el 1H manda: si cambia de dirección se sale ·
         el día del vencimiento se cierra a las 15:30.
       </div>
       <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
@@ -686,7 +688,8 @@ function viewConfig(v) {
     const fd = new FormData(e.target);
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
-      "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "min_score", "partial_r"]) patch[k] = Number(fd.get(k));
+      "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r"]) patch[k] = Number(fd.get(k));
+    patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
     patch.close_eod = true;
     patch.skip_lunch = true;
     patch.setups = fd.getAll("setup");
@@ -894,7 +897,7 @@ function demoData() {
     settings: {
       enabled: true, mode: "paper", broker: "alpaca", has_keys: true, key_hint: "…DEMO", last_equity: 25340.12, alloc_pct: 5, max_contracts: 10,
       max_open_positions: 3, max_trades_per_day: 4, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.45, delta_max: 0.6, partial_r: 0.5, dte_min: 5, dte_max: 10,
-      max_spread_pct: 12, min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
+      max_spread_pct: 12, max_spread_usd: 10, order_type: "limit", min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
     },
     trades,
     events: {
