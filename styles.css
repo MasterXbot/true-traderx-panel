@@ -28,6 +28,10 @@ header.top {
 }
 .brand { font-weight: 700; letter-spacing: .3px; }
 .brand span { color: var(--accent); }
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand .logo { height: 26px; width: auto; }
+.brand-lg { font-size: 22px; flex-direction: column; justify-content: center; margin-bottom: 16px; gap: 10px; }
+.brand-lg .logo { height: 72px; }
 nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 nav.tabs button {
   background: none; border: 0; color: var(--muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit;

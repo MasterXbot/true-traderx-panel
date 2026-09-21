@@ -1,0 +1,20 @@
+<svg width="130" height="100" viewBox="0 0 130 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdf0c8"/>
+      <stop offset="35%" stop-color="#e8c368"/>
+      <stop offset="65%" stop-color="#c99a2e"/>
+      <stop offset="100%" stop-color="#8a6b1f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- M -->
+  <polyline points="8,84 8,16 34,52 60,16 60,84" fill="none" stroke="url(#gold)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- X (shares its left points with M's right leg) -->
+  <line x1="60" y1="16" x2="110" y2="84" stroke="url(#gold)" stroke-width="11" stroke-linecap="round"/>
+  <line x1="60" y1="84" x2="116" y2="22" stroke="url(#gold)" stroke-width="11" stroke-linecap="round"/>
+
+  <!-- Breakout arrowhead -->
+  <polygon points="125,12 121,27 111,17" fill="url(#gold)"/>
+</svg>
