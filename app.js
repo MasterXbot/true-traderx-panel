@@ -49,7 +49,8 @@ async function boot() {
     return render();
   }
   // El enlace de "olvidé mi contraseña" llega con type=recovery en la URL.
-  S.recovering = /type=recovery/.test(location.hash + location.search);
+  // El enlace de invitación (type=invite) también pide crear la contraseña.
+  S.recovering = /type=(recovery|invite)/.test(location.hash + location.search);
   let ready = false;
   sb.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") S.recovering = true;
@@ -892,8 +893,62 @@ function num(name, label, value, min, max, step) {
   return `<div><label>${label}</label><input type="number" name="${name}" value="${value ?? ""}" min="${min}" max="${max}" step="${step}" required></div>`;
 }
 
+async function bindInvites() {
+  const panelUrl = location.origin + location.pathname;
+  const list = async () => {
+    const { data, error } = await sb.rpc("list_invitations");
+    if (error) return ($("#invites").textContent = error.message);
+    const label = { pendiente: "⏳ Pendiente", enviada: "📨 Enviada", aceptada: "✅ Ya entró" };
+    $("#invites").innerHTML = data?.length ? `<div class="table-wrap"><table>
+      <thead><tr><th>Email</th><th>Rol</th><th>Fecha</th><th>Estado</th><th>Correo</th><th></th></tr></thead>
+      <tbody>${data.map((i) => `<tr><td><b>${esc(i.email)}</b></td><td>${esc(i.role)}</td><td>${etDay(i.created_at)}</td>
+        <td>${label[i.status] ?? esc(i.status)}</td>
+        <td>${i.emailed ? "✓ enviado" : `<span class="muted" title="${esc(i.note ?? "")}">manual</span>`}</td>
+        <td><button class="btn sm danger" data-revoke="${esc(i.email)}">Revocar</button></td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="empty">Todavía no hay invitaciones.</div>`;
+    $("#invites").querySelectorAll("[data-revoke]").forEach((b) => (b.onclick = async () => {
+      if (!confirm(`¿Revocar la invitación de ${b.dataset.revoke}? Si ya entró, pierde el acceso.`)) return;
+      try { await action({ action: "revoke_invite", email: b.dataset.revoke }); toast("Invitación revocada"); list(); } catch (err) { toast(err.message); }
+    }));
+  };
+  $("#inviteForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target));
+    const btn = e.target.querySelector("button");
+    btn.disabled = true;
+    try {
+      const r = await action({ action: "invite_user", email: f.email, role: f.role, redirect: panelUrl });
+      if (!r) return;
+      e.target.reset();
+      if (r.existed) toast("Ese email ya tenía cuenta: quedó aprobado", 5000);
+      else if (r.emailed) toast("Invitación enviada por email ✅", 5000);
+      if (r.link) {
+        const msg = `Te invito a True TraderX. Entra aquí para crear tu contraseña: ${r.link}`;
+        $("#inviteLink").innerHTML = `<div class="alert info" style="margin-bottom:12px">El correo automático no salió
+          (${esc(r.error ?? "límite del servicio de email")}). Envíale este enlace tú mismo (es personal, válido 24 h):
+          <div class="row" style="margin-top:8px"><input class="mono" readonly value="${esc(r.link)}" style="flex:1">
+          <button type="button" class="btn sm" id="copyInvite">Copiar mensaje</button></div></div>`;
+        $("#copyInvite").onclick = async () => { await navigator.clipboard.writeText(msg); toast("Mensaje copiado"); };
+      } else $("#inviteLink").innerHTML = "";
+      list();
+    } catch (err) { toast("Error: " + err.message, 7000); }
+    btn.disabled = false;
+  };
+  list();
+}
+
 async function viewAdmin(v) {
-  v.insertAdjacentHTML("beforeend", `<section class="card"><h2>Usuarios</h2><div id="users" class="muted">Cargando…</div></section>
+  v.insertAdjacentHTML("beforeend", `<section class="card"><h2>✉️ Invitar usuarios</h2>
+    <p class="muted">Escribe el email: le llega una invitación, crea su contraseña y entra <b>ya aprobado</b>. Si el correo no sale
+    (límite del servicio de email), aquí aparece el enlace para que se lo mandes tú por WhatsApp o email.</p>
+    <form id="inviteForm" class="row" style="margin-bottom:12px">
+      <input name="email" type="email" required placeholder="correo@ejemplo.com" style="max-width:280px">
+      <select name="role" style="width:auto"><option value="user">Usuario</option><option value="admin">Administrador</option></select>
+      <button class="btn primary">Enviar invitación</button>
+    </form>
+    <div id="inviteLink"></div>
+    <div id="invites" class="muted">Cargando…</div></section>
+  <section class="card"><h2>Usuarios</h2><div id="users" class="muted">Cargando…</div></section>
   <section class="card"><h2>Alertas de seguridad y errores</h2><div id="alerts" class="muted">Cargando…</div></section>
   <section class="card"><h2>Salud del bot</h2><div id="runs" class="muted">Cargando…</div></section>`);
   if (DEMO) {
@@ -901,6 +956,7 @@ async function viewAdmin(v) {
     return;
   }
   viewAlerts();
+  bindInvites();
   const [{ data: users }, { data: trades }, { data: settings }, { data: runs }] = await Promise.all([
     sb.from("profiles").select("*").order("created_at"),
     sb.from("trades").select("user_id, status, realized_pnl, unrealized_pnl").limit(10000),
