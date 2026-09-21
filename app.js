@@ -1,5 +1,5 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609211240";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609211255";
 
 // Si config.js no está configurado, el panel arranca en MODO DEMO con datos de ejemplo.
 const DEMO = SUPABASE_URL.includes("TU-PROYECTO");
@@ -442,14 +442,24 @@ function viewPositions(v) {
   v.insertAdjacentHTML("beforeend", `
   <div class="row" style="margin-bottom:12px">
     <h2 style="margin:0">Posiciones abiertas (${open.length})</h2><div class="spacer"></div>
-    ${open.length ? `<button class="btn danger" id="closeAll">Cerrar todo</button>` : ""}
+    ${open.length ? `<button class="btn danger" id="closeAll">🛑 Cerrar todo</button>` : ""}
   </div>
   ${open.length ? `<div class="grid cols-2">${open.map(posCard).join("")}</div>` : `<div class="card empty">No hay posiciones abiertas. El vigilante revisa cada 2 minutos cuando hay trades.</div>`}`);
   v.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => closeTrade(+b.dataset.close)));
   const ca = $("#closeAll");
   if (ca) ca.onclick = async () => {
-    if (!confirm("¿Cerrar TODAS las posiciones a mercado?")) return;
-    try { await action({ action: "close_all" }); toast("Órdenes de cierre enviadas"); } catch (e) { toast(e.message); }
+    if (!confirm(`¿Cerrar TODAS las posiciones (${open.length}) ahora mismo?`)) return;
+    ca.disabled = true;
+    ca.textContent = "Cerrando…";
+    try {
+      const r = await action({ action: "close_all" });
+      const ok = (r?.closed ?? []).filter((c) => c.sold > 0).length;
+      toast(`Cerradas ${ok} de ${open.length} posiciones` + (ok < open.length ? ": revisa las que quedan" : ""), 8000);
+    } catch (e) {
+      toast("No se pudo cerrar: " + e.message, 8000);
+    } finally {
+      if (!DEMO) { await loadAll(); render(); }
+    }
   };
 }
 
@@ -470,6 +480,7 @@ function posCard(t) {
       <span class="muted mono">${esc(t.option_symbol)}</span>
       <div class="spacer"></div>
       <span class="num ${cls(pnl)}" style="font-size:18px;font-weight:700">${usd(pnl)}</span>
+      <button class="btn danger sm" data-close="${t.id}" title="Vende todos los contratos de esta posición ahora mismo">🛑 Cerrar ya</button>
     </div>
     <div class="stats">
       <div><small>Contratos</small><b class="num">${t.qty_open}/${t.qty}</b></div>
@@ -493,8 +504,19 @@ function posCard(t) {
 }
 
 async function closeTrade(id) {
-  if (!confirm("¿Cerrar esta posición ahora?")) return;
-  try { await action({ action: "close_trade", trade_id: id }); toast("Orden de cierre enviada"); } catch (e) { toast(e.message); }
+  const t = S.trades.find((x) => x.id === id);
+  if (!confirm(`¿Cerrar YA ${t ? `${t.qty_open} contrato(s) de ${t.symbol} (${t.option_symbol})` : "esta posición"}?\nSe vende al precio de mercado disponible.`)) return;
+  const btns = document.querySelectorAll(`[data-close="${id}"]`);
+  btns.forEach((b) => { b.disabled = true; b.textContent = "Cerrando…"; });
+  try {
+    const r = await action({ action: "close_trade", trade_id: id });
+    const sold = r?.closed?.[0]?.sold ?? 0;
+    toast(sold > 0 ? `Cerrada: se vendieron ${sold} contrato(s)` : "El broker no llenó la venta. Revisa la bitácora del vigilante y vuelve a intentar.", 7000);
+  } catch (e) {
+    toast("No se pudo cerrar: " + e.message, 8000);
+  } finally {
+    if (!DEMO) { await loadAll(); render(); }
+  }
 }
 
 function viewHistory(v) {
