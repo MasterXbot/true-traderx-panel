@@ -1,5 +1,5 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609211116";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609211240";
 
 // Si config.js no está configurado, el panel arranca en MODO DEMO con datos de ejemplo.
 const DEMO = SUPABASE_URL.includes("TU-PROYECTO");
@@ -575,11 +575,12 @@ function viewConfig(v) {
       <span>${s.tv_enabled ? "Recibiendo alertas de TradingView" : "Alertas de TradingView apagadas"}</span></label>
     <div class="grid">
       <div><label>1. Webhook URL (en la alerta: Notificaciones → Webhook URL)</label>
-        <div class="row"><input readonly id="tvUrl" value="${esc(TV_URL)}"><button type="button" class="btn sm" data-copy="tvUrl">Copiar</button></div></div>
+        <div class="row"><input readonly id="tvUrl" class="mono" value="${esc(TV_URL + "?key=" + (s.tv_key ?? ""))}"><button type="button" class="btn sm" data-copy="tvUrl">Copiar</button></div>
+        <p class="muted" style="margin:4px 0 0;font-size:12px">La URL ya lleva tu llave privada: es la misma para todas tus alertas (CALL, PUT y cierre).</p></div>
       ${["CALL", "PUT", "CLOSE"].map((a) => `<div><label>2. Mensaje para una alerta de ${a === "CLOSE" ? "cierre" : a} (campo «Mensaje» de la alerta)</label>
         <div class="row"><input readonly id="tvMsg${a}" class="mono" value='${esc(tvMessage(s.tv_key, a))}'><button type="button" class="btn sm" data-copy="tvMsg${a}">Copiar</button></div></div>`).join("")}
-      <p class="muted" style="margin:0;font-size:12px">Cambia "Mi indicador" por el nombre de tu indicador. {{ticker}} y {{close}} los rellena TradingView.
-      La llave va dentro del mensaje: no la compartas. Si se filtra, genera una nueva.</p>
+      <p class="muted" style="margin:0;font-size:12px">{{ticker}} lo rellena TradingView con el activo. El bot también entiende mensajes como
+      "buy NVDA", "sell SPY" o "exit QQQ". No compartas la URL: lleva tu llave. Si se filtra, genera una nueva.</p>
       <div class="row"><button type="button" class="btn danger sm" id="tvRegen">Generar llave nueva</button></div>
     </div>
     <h3 style="margin-top:16px">Últimas alertas recibidas</h3>
@@ -701,9 +702,8 @@ function viewConfig(v) {
 }
 
 const TV_URL = SUPABASE_URL + "/functions/v1/tv-webhook";
-function tvMessage(key, action) {
-  return JSON.stringify({ key: key ?? "TU_LLAVE", symbol: "{{ticker}}", action, price: "{{close}}", indicator: "Mi indicador" })
-    .replace('"{{close}}"', "{{close}}");
+function tvMessage(_key, action) {
+  return `${action} {{ticker}}`;
 }
 
 async function bindTradingView(v) {
