@@ -405,7 +405,17 @@ async function viewIntelligence(v) {
     (necesita al menos 8 trades para opinar).</p>
     <div id="aiStats" class="muted">Cargando…</div>
   </section>
+  <section class="card">
+    <div class="row"><h2 style="margin:0">🔬 Agente investigador</h2><div class="spacer"></div>
+      <button class="btn sm" id="researchNow">Investigar ahora</button></div>
+    <p class="muted">Cada tarde (después del cierre) revive tus trades de los últimos 30 días vela a vela con las velas reales de 5M/15M/1H
+    y prueba otros valores de stop loss y toma de ganancia. Solo cambia un ajuste si gana más en total <b>y</b> también en los trades
+    antiguos y en los recientes; lo mueve un paso por día (máximo 2 ajustes) y necesita al menos 8 trades. Los límites de riesgo
+    (pérdida diaria, tamaño, horarios) nunca los toca.</p>
+    <div id="aiResearch" class="muted">Cargando…</div>
+  </section>
   <section class="card"><h2>Lecciones recientes del analista</h2><div id="aiLessons"></div></section>`);
+  bindResearch();
   const lessons = S.trades.filter((t) => t.lesson).slice(0, 15);
   $("#aiLessons").innerHTML = lessons.length
     ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Activo</th><th>Setup</th><th class="num">P&L</th><th class="num">MFE</th><th class="num">Dejado</th><th>Lección</th></tr></thead><tbody>
@@ -429,6 +439,42 @@ async function viewIntelligence(v) {
       <td class="num ${cls(r.avg_pnl)}">${usd(r.avg_pnl)}</td><td class="num">${r.avg_left_r != null ? "+" + (+r.avg_left_r).toFixed(2) + "R" : "—"}</td></tr>`).join("")}
     </tbody></table></div></div>`).join("")}</div>`
     : `<div class="empty">Todavía no hay trades cerrados para aprender. Las estadísticas se actualizan cada día a las 16:20 NY.</div>`;
+}
+
+async function bindResearch() {
+  const box = $("#aiResearch"), btn = $("#researchNow");
+  if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = "Investigando…";
+    try {
+      const { error } = await sb.functions.invoke("research", { body: {} });
+      if (error) throw error;
+      toast("Investigación terminada");
+      await loadAll();
+      await viewReports(box);
+    } catch (err) { toast("Error: " + err.message, 6000); }
+    btn.disabled = false;
+    btn.textContent = "Investigar ahora";
+  };
+  await viewReports(box);
+}
+
+async function viewReports(box) {
+  const { data } = await sb.from("research_reports").select("*").order("created_at", { ascending: false }).limit(7);
+  if (!data?.length) return (box.innerHTML = `<div class="empty">Todavía no hay reportes. El primero sale hoy después del cierre, o pulsa "Investigar ahora".</div>`);
+  box.innerHTML = data.map((r, k) => `
+    <div style="border-top:1px solid var(--line);padding:10px 0">
+      <div class="row"><b>${esc(r.day)}</b>
+        <span class="badge">${r.n_trades} trades</span>
+        <span class="badge">${r.applied ? "✅ Ajustes aplicados" : r.changes?.length ? "💡 Sugerencia" : "Sin cambios"}</span></div>
+      <div class="stats" style="margin:6px 0">
+        <div><small>Real</small><b class="${cls(r.actual_pnl)}">${usd(r.actual_pnl)}</b></div>
+        <div><small>Simulado (ajustes previos)</small><b class="${cls(r.sim_before)}">${usd(r.sim_before)}</b></div>
+        <div><small>Simulado (ajustes nuevos)</small><b class="${cls(r.sim_after)}">${usd(r.sim_after)}</b></div></div>
+      ${(r.changes ?? []).map((c) => `<div class="alert info" style="margin:4px 0">⚙️ ${esc(c)}</div>`).join("")}
+      ${k === 0 ? (r.findings?.notes ?? []).map((n) => `<div class="muted">• ${esc(n)}</div>`).join("") : ""}
+    </div>`).join("");
 }
 
 function timeline(events) {
@@ -624,6 +670,15 @@ function viewConfig(v) {
       ${num("delta_min", "Delta mínimo (ATM ≈ 0.50)", s.delta_min, 0.05, 0.95, 0.01)}
       ${num("delta_max", "Delta máximo (ligeramente ITM ≈ 0.60)", s.delta_max, 0.05, 0.95, 0.01)}
       ${num("partial_r", "Asegurar 50% en +R (0 = dejar correr todo)", s.partial_r ?? 0.5, 0, 5, 0.25)}
+      ${num("stop_mult", "Distancia del stop (× la estructura)", s.stop_mult ?? 1, 0.5, 2, 0.05)}
+      ${num("tp_cap_r", "Ganancia segura: cerrar todo en +R", s.tp_cap_r ?? 2, 0.5, 5, 0.25)}
+      ${num("be_r", "Stop a breakeven en +R", s.be_r ?? 0.5, 0.1, 2, 0.05)}
+      ${num("time_stop_min", "Cortar si no arranca en (min)", s.time_stop_min ?? 30, 10, 120, 5)}
+      ${num("level_min_r", "Distancia mínima a techo/piso (R)", s.level_min_r ?? 0.25, 0.05, 1, 0.05)}
+      <div><label>Agente investigador</label><select name="research_mode">
+        <option value="auto" ${s.research_enabled !== false && s.research_auto !== false ? "selected" : ""}>Ajusta solo (automático)</option>
+        <option value="suggest" ${s.research_enabled !== false && s.research_auto === false ? "selected" : ""}>Solo sugiere</option>
+        <option value="off" ${s.research_enabled === false ? "selected" : ""}>Apagado</option></select></div>
       ${num("dte_min", "Vencimiento mín. (días)", s.dte_min, 0, 30, 1)}
       ${num("dte_max", "Vencimiento máx. (días)", s.dte_max, 0, 45, 1)}
       ${num("max_spread_usd", "Spread máx. por contrato (US$)", s.max_spread_usd ?? 10, 1, 500, 1)}
@@ -693,7 +748,10 @@ function viewConfig(v) {
     const fd = new FormData(e.target);
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
-      "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r"]) patch[k] = Number(fd.get(k));
+      "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r"]) patch[k] = Number(fd.get(k));
+    patch.research_enabled = fd.get("research_mode") !== "off";
+    patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
     patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
     patch.trade_style = fd.get("trade_style") === "swing" ? "swing" : "scalp";
