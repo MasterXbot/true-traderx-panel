@@ -603,6 +603,9 @@ function viewConfig(v) {
         <div class="row"><input readonly id="tvMsg${a}" class="mono" value='${esc(tvMessage(s.tv_key, a))}'><button type="button" class="btn sm" data-copy="tvMsg${a}">Copiar</button></div></div>`).join("")}
       <p class="muted" style="margin:0;font-size:12px">{{ticker}} lo rellena TradingView con el activo. El bot también entiende mensajes como
       "buy NVDA", "sell SPY" o "exit QQQ". No compartas la URL: lleva tu llave. Si se filtra, genera una nueva.</p>
+      <div><label>3. Activo para alertas sin activo (si tu indicador no dice el ticker, ej. "CALL Confirmado")</label>
+        <div class="row"><input id="tvDefault" class="mono" style="max-width:160px;text-transform:uppercase" placeholder="Ej: QQQ" value="${esc(s.tv_default_symbol ?? "")}">
+        <button type="button" class="btn sm" id="tvDefaultSave">Guardar</button></div></div>
       <div class="row"><button type="button" class="btn danger sm" id="tvRegen">Generar llave nueva</button></div>
     </div>
     <h3 style="margin-top:16px">Últimas alertas recibidas</h3>
@@ -625,6 +628,7 @@ function viewConfig(v) {
       ${num("dte_max", "Vencimiento máx. (días)", s.dte_max, 0, 45, 1)}
       ${num("max_spread_usd", "Spread máx. por contrato (US$)", s.max_spread_usd ?? 10, 1, 500, 1)}
       ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 100, 1)}
+      <div><label>Vencimiento del contrato</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>Mañana: mismo día · Tarde: día siguiente</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>Semanal (viernes)</option></select></div>
       <div><label>Tipo de orden al comprar/vender</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1" class="alert info">
@@ -690,6 +694,7 @@ function viewConfig(v) {
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r"]) patch[k] = Number(fd.get(k));
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
+    patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
     patch.close_eod = true;
     patch.skip_lunch = true;
     patch.setups = fd.getAll("setup");
@@ -743,6 +748,11 @@ async function bindTradingView(v) {
     try { await navigator.clipboard.writeText(el.value); } catch { el.select(); document.execCommand("copy"); }
     toast("Copiado");
   }));
+  $("#tvDefaultSave").onclick = async () => {
+    const v = $("#tvDefault").value.trim().toUpperCase().replace(/[^A-Z.]/g, "");
+    await saveSettings({ tv_default_symbol: v || null });
+    toast(v ? `Las alertas sin activo se operarán en ${v}` : "Activo por defecto quitado");
+  };
   $("#tvRegen").onclick = async () => {
     if (DEMO) return toast("Modo demo");
     if (!confirm("¿Generar una llave nueva? Tendrás que actualizar el mensaje de TODAS tus alertas en TradingView.")) return;
@@ -897,7 +907,7 @@ function demoData() {
     settings: {
       enabled: true, mode: "paper", broker: "alpaca", has_keys: true, key_hint: "…DEMO", last_equity: 25340.12, alloc_pct: 5, max_contracts: 10,
       max_open_positions: 3, max_trades_per_day: 4, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.45, delta_max: 0.6, partial_r: 0.5, dte_min: 5, dte_max: 10,
-      max_spread_pct: 12, max_spread_usd: 10, order_type: "limit", min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
+      max_spread_pct: 12, max_spread_usd: 10, order_type: "market", expiry_mode: "intraday", tv_default_symbol: "", min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
     },
     trades,
     events: {
