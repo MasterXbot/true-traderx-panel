@@ -629,6 +629,7 @@ function viewConfig(v) {
       ${num("max_spread_usd", "Spread máx. por contrato (US$)", s.max_spread_usd ?? 10, 1, 500, 1)}
       ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 100, 1)}
       <div><label>Vencimiento del contrato</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>Mañana: mismo día · Tarde: día siguiente</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>Semanal (viernes)</option></select></div>
+      <div><label>Estilo de gestión</label><select name="trade_style"><option value="scalp" ${(s.trade_style ?? "scalp") === "scalp" ? "selected" : ""}>Scalping (5M · 15M · 1H)</option><option value="swing" ${s.trade_style === "swing" ? "selected" : ""}>Swing intradía (15M · 1H)</option></select></div>
       <div><label>Tipo de orden al comprar/vender</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1" class="alert info">
@@ -695,6 +696,7 @@ function viewConfig(v) {
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r"]) patch[k] = Number(fd.get(k));
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
     patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
+    patch.trade_style = fd.get("trade_style") === "swing" ? "swing" : "scalp";
     patch.close_eod = true;
     patch.skip_lunch = true;
     patch.setups = fd.getAll("setup");
@@ -907,7 +909,7 @@ function demoData() {
     settings: {
       enabled: true, mode: "paper", broker: "alpaca", has_keys: true, key_hint: "…DEMO", last_equity: 25340.12, alloc_pct: 5, max_contracts: 10,
       max_open_positions: 3, max_trades_per_day: 4, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.45, delta_max: 0.6, partial_r: 0.5, dte_min: 5, dte_max: 10,
-      max_spread_pct: 12, max_spread_usd: 10, order_type: "market", expiry_mode: "intraday", tv_default_symbol: "", min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
+      max_spread_pct: 12, max_spread_usd: 10, order_type: "market", expiry_mode: "intraday", trade_style: "scalp", tv_default_symbol: "", min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
     },
     trades,
     events: {
