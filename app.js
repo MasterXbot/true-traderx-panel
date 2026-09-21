@@ -668,13 +668,14 @@ function viewConfig(v) {
       ${num("daily_loss_limit_pct", "Pérdida diaria máx. (%)", s.daily_loss_limit_pct, 0.5, 100, 0.5)}
       ${num("option_stop_pct", "Stop de prima (%)", s.option_stop_pct, 5, 100, 1)}
       ${num("delta_min", "Delta mínimo (ATM ≈ 0.50)", s.delta_min, 0.05, 0.95, 0.01)}
-      ${num("delta_max", "Delta máximo (ligeramente ITM ≈ 0.60)", s.delta_max, 0.05, 0.95, 0.01)}
+      ${num("delta_max", "Delta máximo (en el dinero ≈ 0.70)", s.delta_max, 0.05, 0.95, 0.01)}
       ${num("partial_r", "Asegurar 50% en +R (0 = dejar correr todo)", s.partial_r ?? 0.5, 0, 5, 0.25)}
       ${num("stop_mult", "Distancia del stop (× la estructura)", s.stop_mult ?? 1, 0.5, 2, 0.05)}
       ${num("tp_cap_r", "Ganancia segura: cerrar todo en +R", s.tp_cap_r ?? 2, 0.5, 5, 0.25)}
       ${num("be_r", "Stop a breakeven en +R", s.be_r ?? 0.5, 0.1, 2, 0.05)}
       ${num("time_stop_min", "Cortar si no arranca en (min)", s.time_stop_min ?? 30, 10, 120, 5)}
       ${num("level_min_r", "Distancia mínima a techo/piso (R)", s.level_min_r ?? 0.25, 0.05, 1, 0.05)}
+      ${num("min_profit_pct", "Ganancia mínima real de la opción para tomar ganancia (%)", s.min_profit_pct ?? 8, 0, 100, 1)}
       <div><label>Agente investigador</label><select name="research_mode">
         <option value="auto" ${s.research_enabled !== false && s.research_auto !== false ? "selected" : ""}>Ajusta solo (automático)</option>
         <option value="suggest" ${s.research_enabled !== false && s.research_auto === false ? "selected" : ""}>Solo sugiere</option>
@@ -690,7 +691,7 @@ function viewConfig(v) {
       <div style="grid-column:1/-1" class="alert info">
         <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
         no se abren trades en el almuerzo (11:30–13:30), ni en los primeros 15 minutos, ni después de las 15:15 ·
-        solo contratos ATM o hasta 3% ITM, semanales y con el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato) · el 1H manda: si cambia de dirección se sale ·
+        nunca contratos fuera del dinero: solo en el dinero hasta 3% ITM, con el delta que más responde y luego el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato) · el 1H manda: si cambia de dirección se sale ·
         el día del vencimiento se cierra a las 15:30.
       </div>
       <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
@@ -749,7 +750,7 @@ function viewConfig(v) {
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct"]) patch[k] = Number(fd.get(k));
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
@@ -966,7 +967,7 @@ function demoData() {
     profile: { role: "admin", approved: true, full_name: "Demo" },
     settings: {
       enabled: true, mode: "paper", broker: "alpaca", has_keys: true, key_hint: "…DEMO", last_equity: 25340.12, alloc_pct: 5, max_contracts: 10,
-      max_open_positions: 3, max_trades_per_day: 4, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.45, delta_max: 0.6, partial_r: 0.5, dte_min: 5, dte_max: 10,
+      max_open_positions: 3, max_trades_per_day: 0, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.55, delta_max: 0.7, partial_r: 0.5, dte_min: 5, dte_max: 10,
       max_spread_pct: 12, max_spread_usd: 10, order_type: "market", expiry_mode: "intraday", trade_style: "scalp", tv_default_symbol: "", min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
     },
     trades,
