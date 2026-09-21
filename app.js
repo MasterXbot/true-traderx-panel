@@ -441,6 +441,41 @@ async function viewIntelligence(v) {
     : `<div class="empty">Todavía no hay trades cerrados para aprender. Las estadísticas se actualizan cada día a las 16:20 NY.</div>`;
 }
 
+async function bindPaper() {
+  const box = $("#paperAcct");
+  if (DEMO) return box && (box.textContent = "Disponible al conectar Supabase");
+  $("#paperEngine").onchange = async (e) => {
+    await saveSettings({ paper_engine: e.target.value === "broker" ? "broker" : "internal" });
+    toast("Motor del paper guardado (aplica a las entradas nuevas)");
+  };
+  $("#dataTokenSave").onclick = async () => {
+    const token = $("#dataToken").value.trim();
+    if (!token) return toast("Pega el token primero");
+    try {
+      const r = await action({ action: "save_data_token", token });
+      $("#dataToken").value = "";
+      if (r) toast(`Tiempo real conectado ✅ (SPY ${r.spy})`, 5000);
+      await loadAll();
+      render();
+    } catch (err) { toast("Error: " + err.message, 7000); }
+  };
+  $("#dataTokenDel")?.addEventListener("click", async () => {
+    if (!confirm("¿Quitar el token de datos? El paper volverá a precios retrasados.")) return;
+    try { await action({ action: "delete_data_token" }); await loadAll(); render(); } catch (err) { toast(err.message); }
+  });
+  $("#paperReset").onclick = async () => {
+    const cash = Number($("#paperCash").value);
+    if (!confirm(`¿Reiniciar la cuenta paper interna con ${usd(cash)}? Se borra su historial de órdenes (los trades del panel se conservan).`)) return;
+    try { await action({ action: "paper_reset", cash }); toast("Cuenta paper reiniciada"); bindPaper(); } catch (err) { toast("Error: " + err.message, 6000); }
+  };
+  try {
+    const r = await action({ action: "paper_account" });
+    box.innerHTML = r?.cash == null ? "Se crea con tu primera operación (capital inicial = el de tu cuenta paper)"
+      : `Efectivo <b>${usd(r.cash)}</b> · Capital <b>${usd(r.equity ?? r.cash)}</b> · Inicial ${usd(r.start)} · ` +
+        `<span class="${cls((r.equity ?? r.cash) - r.start)}">${usd((r.equity ?? r.cash) - r.start)}</span>`;
+  } catch { box.textContent = "—"; }
+}
+
 async function bindResearch() {
   const box = $("#aiResearch"), btn = $("#researchNow");
   if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
@@ -659,6 +694,27 @@ function viewConfig(v) {
   </section>
 
   <section class="card">
+    <h2>🧪 Paper con precios reales</h2>
+    <p class="muted">El <b>paper interno</b> simula tu cuenta dentro del bot: cada compra a mercado se llena al <b>ask real</b> y cada venta
+    al <b>bid real</b> del momento, con un pequeño deslizamiento y la comisión de Tradier ($0.35 por contrato), como con dinero real.
+    Para precios en <b>tiempo real</b> pega el token de tu cuenta <b>real</b> de Tradier (Tradier → Settings → API Access → token de producción).
+    Ese token solo se usa para <b>leer precios</b>: el bot nunca manda órdenes con él. Sin token usa los precios del sandbox (15 min tarde).</p>
+    <div class="form">
+      <div><label>Motor del paper (entradas nuevas)</label><select id="paperEngine">
+        <option value="internal" ${(s.paper_engine ?? "internal") === "internal" ? "selected" : ""}>Paper interno (llenados simulados con precios reales)</option>
+        <option value="broker" ${s.paper_engine === "broker" ? "selected" : ""}>Sandbox de Tradier (precios 15 min tarde)</option></select></div>
+      <div><label>Precios</label><div>${s.has_realtime ? `<span class="badge">✅ Tiempo real (Tradier producción)</span>` : `<span class="badge">⚠️ Retrasados 15 min (sandbox)</span>`}</div></div>
+      <div style="grid-column:1/-1"><label>Token de datos de Tradier (producción, solo lectura de precios)</label>
+        <div class="row"><input id="dataToken" type="password" class="mono" autocomplete="off" placeholder="${s.has_realtime ? "Guardado ✓ — pega otro para cambiarlo" : "Pega aquí tu token de producción"}" style="max-width:360px">
+        <button type="button" class="btn sm" id="dataTokenSave">Guardar token</button>
+        ${s.has_realtime ? `<button type="button" class="btn sm danger" id="dataTokenDel">Quitar</button>` : ""}</div></div>
+      <div><label>Cuenta paper interna</label><div id="paperAcct" class="muted">Cargando…</div></div>
+      <div><label>Reiniciar con capital (US$)</label><div class="row"><input id="paperCash" type="number" min="1000" step="1000" value="100000" style="max-width:160px">
+        <button type="button" class="btn sm danger" id="paperReset">Reiniciar paper</button></div></div>
+    </div>
+  </section>
+
+  <section class="card">
     <h2>Riesgo y contratos</h2>
     <form id="riskForm" class="form">
       ${num("alloc_pct", "% del capital por trade", s.alloc_pct, 0.5, 50, 0.5)}
@@ -765,6 +821,7 @@ function viewConfig(v) {
     toast("Configuración guardada");
   };
 
+  bindPaper();
   bindTradingView(v);
 
   $("#watchForm").onsubmit = async (e) => {
