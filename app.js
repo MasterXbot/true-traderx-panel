@@ -1,5 +1,5 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609210045";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js?v=202609211116";
 
 // Si config.js no está configurado, el panel arranca en MODO DEMO con datos de ejemplo.
 const DEMO = SUPABASE_URL.includes("TU-PROYECTO");
@@ -11,6 +11,7 @@ const SETUPS = {
   iman: "Imán (reversión a EMA20)",
   momentum: "Momentum",
   rompimiento_ema20: "Rompimiento EMA20",
+  tradingview: "Alerta de TradingView",
 };
 
 const S = { user: null, profile: null, settings: null, trades: [], events: {}, signals: [], watch: [], tab: "panel", charts: [] };
@@ -527,7 +528,7 @@ function viewSignals(v) {
     <h2>Señales detectadas</h2>
     <p class="muted">El scanner revisa tus activos 1 minuto después de cada cierre de vela de 15M. Solo se opera si el score ≥ tu mínimo (${S.settings?.min_score}).</p>
     ${S.signals.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Hora (NY)</th><th>Activo</th><th>Dirección</th><th>Setup</th><th class="num">Score</th><th class="num">Precio</th><th class="num">Stop</th><th class="num">Objetivo</th><th>4H / 1H</th><th>Motivos</th></tr></thead>
+      <thead><tr><th>Hora (NY)</th><th>Activo</th><th>Dirección</th><th>Setup</th><th class="num">Score</th><th class="num">Precio</th><th class="num">Stop</th><th class="num">Objetivo</th><th>4H / 1H</th><th>Decisión del bot</th><th>Motivos</th></tr></thead>
       <tbody>${S.signals.map((s) => `<tr>
         <td>${etDay(s.bar_time).slice(5)} ${etTime(s.bar_time)}</td><td><b>${esc(s.symbol)}</b></td>
         <td><span class="badge ${s.direction === "CALL" ? "call" : "put"}">${s.direction}</span></td>
@@ -535,6 +536,7 @@ function viewSignals(v) {
         <td class="num ${s.score >= (S.settings?.min_score ?? 60) ? "pos" : "muted"}">${s.score}</td>
         <td class="num">${(+s.price).toFixed(2)}</td><td class="num">${(+s.stop).toFixed(2)}</td><td class="num">${s.target ? (+s.target).toFixed(2) : "—"}</td>
         <td>${esc(s.bias_4h)} / ${esc(s.bias_1h)}</td>
+        <td style="white-space:normal;min-width:200px" class="${/^ENTRÓ/.test(s.decision ?? "") ? "pos" : "muted"}">${esc(s.decision ?? "—")}</td>
         <td class="muted" style="white-space:normal;min-width:240px">${esc((s.reasons ?? []).join(" · "))}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="empty">Sin señales todavía</div>`}
   </div>`);
@@ -562,6 +564,26 @@ function viewConfig(v) {
         ${s.has_keys ? `<button type="button" class="btn" id="testKeys">Probar</button><button type="button" class="btn danger" id="delKeys">Borrar</button>` : ""}
       </div>
     </form>
+  </section>
+
+  <section class="card">
+    <h2>Alertas de TradingView</h2>
+    <p class="muted">Tu indicador de TradingView puede abrir y cerrar trades además de los setups propios del bot.
+    Cada alerta pasa por el mismo guardián (horarios, almuerzo, límites del día, el 1H manda) y el mismo agente de contrato
+    (ATM/ITM, menor spread). Los webhooks necesitan plan pago de TradingView.</p>
+    <label class="check" style="margin-bottom:12px"><span class="switch"><input type="checkbox" id="tvToggle" ${s.tv_enabled ? "checked" : ""}><span></span></span>
+      <span>${s.tv_enabled ? "Recibiendo alertas de TradingView" : "Alertas de TradingView apagadas"}</span></label>
+    <div class="grid">
+      <div><label>1. Webhook URL (en la alerta: Notificaciones → Webhook URL)</label>
+        <div class="row"><input readonly id="tvUrl" value="${esc(TV_URL)}"><button type="button" class="btn sm" data-copy="tvUrl">Copiar</button></div></div>
+      ${["CALL", "PUT", "CLOSE"].map((a) => `<div><label>2. Mensaje para una alerta de ${a === "CLOSE" ? "cierre" : a} (campo «Mensaje» de la alerta)</label>
+        <div class="row"><input readonly id="tvMsg${a}" class="mono" value='${esc(tvMessage(s.tv_key, a))}'><button type="button" class="btn sm" data-copy="tvMsg${a}">Copiar</button></div></div>`).join("")}
+      <p class="muted" style="margin:0;font-size:12px">Cambia "Mi indicador" por el nombre de tu indicador. {{ticker}} y {{close}} los rellena TradingView.
+      La llave va dentro del mensaje: no la compartas. Si se filtra, genera una nueva.</p>
+      <div class="row"><button type="button" class="btn danger sm" id="tvRegen">Generar llave nueva</button></div>
+    </div>
+    <h3 style="margin-top:16px">Últimas alertas recibidas</h3>
+    <div id="tvLog" class="muted">Cargando…</div>
   </section>
 
   <section class="card">
@@ -651,6 +673,8 @@ function viewConfig(v) {
     toast("Configuración guardada");
   };
 
+  bindTradingView(v);
+
   $("#watchForm").onsubmit = async (e) => {
     e.preventDefault();
     const symbol = new FormData(e.target).get("symbol").trim().toUpperCase();
@@ -674,6 +698,41 @@ function viewConfig(v) {
     if (!DEMO) await sb.from("watchlist").delete().eq("id", id);
     render();
   }));
+}
+
+const TV_URL = SUPABASE_URL + "/functions/v1/tv-webhook";
+function tvMessage(key, action) {
+  return JSON.stringify({ key: key ?? "TU_LLAVE", symbol: "{{ticker}}", action, price: "{{close}}", indicator: "Mi indicador" })
+    .replace('"{{close}}"', "{{close}}");
+}
+
+async function bindTradingView(v) {
+  const toggle = $("#tvToggle");
+  if (!toggle) return;
+  toggle.onchange = async () => {
+    await saveSettings({ tv_enabled: toggle.checked });
+    toast(toggle.checked ? "Alertas de TradingView activadas" : "Alertas de TradingView apagadas");
+  };
+  v.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
+    const el = $("#" + b.dataset.copy);
+    try { await navigator.clipboard.writeText(el.value); } catch { el.select(); document.execCommand("copy"); }
+    toast("Copiado");
+  }));
+  $("#tvRegen").onclick = async () => {
+    if (DEMO) return toast("Modo demo");
+    if (!confirm("¿Generar una llave nueva? Tendrás que actualizar el mensaje de TODAS tus alertas en TradingView.")) return;
+    const { data, error } = await sb.rpc("regenerate_tv_key");
+    if (error) return toast(error.message);
+    S.settings.tv_key = data;
+    toast("Llave nueva generada: actualiza tus alertas");
+    render();
+  };
+  if (DEMO) return ($("#tvLog").innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  const { data } = await sb.from("tv_alerts").select("*").order("ts", { ascending: false }).limit(15);
+  $("#tvLog").innerHTML = (data ?? []).length ? `<div class="table-wrap"><table><thead><tr><th>Hora (NY)</th><th>Activo</th><th>Acción</th><th>Resultado</th></tr></thead><tbody>
+    ${data.map((a) => `<tr><td>${etDay(a.ts).slice(5)} ${etTime(a.ts)}</td><td><b>${esc(a.symbol)}</b></td><td>${esc(a.action)}</td>
+      <td style="white-space:normal" class="${/^ENTRÓ|^Cerradas/.test(a.result ?? "") ? "pos" : /^ERROR/.test(a.result ?? "") ? "neg" : "muted"}">${esc(a.result)}</td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty">Todavía no llegan alertas. Crea una alerta en TradingView con el Webhook URL y el mensaje de arriba.</div>`;
 }
 
 function num(name, label, value, min, max, step) {
@@ -813,7 +872,7 @@ function demoData() {
     settings: {
       enabled: true, mode: "paper", broker: "alpaca", has_keys: true, key_hint: "…DEMO", last_equity: 25340.12, alloc_pct: 5, max_contracts: 10,
       max_open_positions: 3, max_trades_per_day: 4, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.45, delta_max: 0.6, partial_r: 0.5, dte_min: 5, dte_max: 10,
-      max_spread_pct: 12, min_score: 60, close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
+      max_spread_pct: 12, min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
     },
     trades,
     events: {
