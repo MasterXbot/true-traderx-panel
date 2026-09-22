@@ -1,6 +1,6 @@
 // Service worker de la app instalable. Siempre intenta la red primero (los datos de trading deben
 // estar frescos) y solo usa la copia guardada si no hay conexión. Nunca guarda llamadas a la API.
-const CACHE = "ttx-v7";
+const CACHE = "ttx-v8";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "config.js", "logo.svg", "icon-192.png", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

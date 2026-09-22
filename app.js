@@ -847,6 +847,9 @@ ${isAdmin ? `
       ${num("lock_start_pct", "Candado de ganancia desde +% de la opción (0 = apagado)", s.lock_start_pct ?? 8, 0, 100, 1)}
       ${num("lock_keep", "Parte del máximo que asegura el candado (0.5 = la mitad)", s.lock_keep ?? 0.5, 0.2, 0.9, 0.05)}
       ${num("candle_trail", "Stop vela por vela desde × el candado (3 = +24%; 0 = nunca)", s.candle_trail ?? 3, 0, 10, 0.5)}
+      ${num("ema_stop_1m", "Invalidación por EMA de 1M: minutos de aire (0 = apagada)", s.ema_stop_1m ?? 5, 0, 60, 1)}
+      ${num("ema_stop_atr", "Margen de ruptura de la EMA de 1M (ATR)", s.ema_stop_atr ?? 0.15, 0, 2, 0.05)}
+      ${num("ema_stop_peak_r", "La invalidación solo aplica hasta +R de avance", s.ema_stop_peak_r ?? 0.35, 0, 2, 0.05)}
       <div><label>Agente investigador</label><select name="research_mode">
         <option value="auto" ${s.research_enabled !== false && s.research_auto !== false ? "selected" : ""}>Ajusta solo (automático)</option>
         <option value="suggest" ${s.research_enabled !== false && s.research_auto === false ? "selected" : ""}>Solo sugiere</option>
@@ -927,7 +930,7 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_wait_min"]) patch[k] = Number(fd.get(k));
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
