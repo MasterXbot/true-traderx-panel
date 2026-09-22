@@ -42,6 +42,34 @@ async function action(body) {
   return data;
 }
 
+// ---------- app instalable (teléfono, tablet y computadora) ----------
+let installEvt = null;
+addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); // se muestra nuestro botón "Instalar app" en lugar del aviso del navegador
+  installEvt = e;
+  if (S.user) render();
+});
+addEventListener("appinstalled", () => {
+  installEvt = null;
+  toast("App instalada ✅");
+  if (S.user) render();
+});
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function installable() {
+  return !isStandalone() && (installEvt !== null || isIOS());
+}
+async function installApp() {
+  if (installEvt) {
+    installEvt.prompt();
+    await installEvt.userChoice;
+    installEvt = null;
+    return render();
+  }
+  // iPhone / iPad: Safari no tiene botón de instalar automático.
+  toast("En iPhone/iPad: abre esta página en Safari, toca Compartir (□↑) y luego «Agregar a pantalla de inicio».", 9000);
+}
+
 // ---------- arranque ----------
 async function boot() {
   if (DEMO) {
@@ -209,6 +237,7 @@ function render() {
       <span class="switch"><input type="checkbox" id="botToggle" ${st.enabled ? "checked" : ""}><span></span></span>
       <span>${st.enabled ? "Bot activo" : "Bot apagado"}</span>
     </label>
+    ${installable() ? `<button class="btn sm" id="installApp" title="Instalar True TraderX como app">📲 Instalar app</button>` : ""}
     ${DEMO ? "" : `<button class="btn sm" id="logout">Salir</button>`}
   </header>
   <main id="view"></main>`;
@@ -216,6 +245,7 @@ function render() {
   document.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { S.tab = b.dataset.tab; render(); }));
   $("#botToggle").onchange = (e) => toggleBot(e.target.checked);
   if (!DEMO) $("#logout").onclick = () => sb.auth.signOut();
+  $("#installApp")?.addEventListener("click", installApp);
 
   const view = $("#view");
   if (!S.profile?.approved) {
@@ -224,7 +254,7 @@ function render() {
   }
   const banners = [];
   if (st.last_error) banners.push(`<div class="alert">⚠ ${esc(st.last_error)}</div>`);
-  if (!st.has_keys) banners.push(`<div class="alert info">Conecta tu broker en <b>Configuración</b> para que el bot pueda operar.</div>`);
+  if (!st.has_keys) banners.push(`<div class="alert info">👋 <b>Bienvenido a True TraderX.</b> Solo te falta un paso: conecta tu broker en <b>Configuración → Broker</b>. La estrategia, los stops y las alertas ya vienen configurados por el administrador, y el bot se enciende solo al conectar.</div>`);
   view.insertAdjacentHTML("beforeend", banners.join(""));
   ({ panel: viewPanel, pos: viewPositions, hist: viewHistory, sig: viewSignals, ai: viewIntelligence, cfg: viewConfig, admin: viewAdmin })[S.tab](view);
 }
@@ -647,6 +677,7 @@ function viewSignals(v) {
 }
 
 function viewConfig(v) {
+  const isAdmin = S.profile?.role === "admin";
   const s = S.settings ?? {};
   v.insertAdjacentHTML("beforeend", `
   <section class="card">
@@ -670,6 +701,7 @@ function viewConfig(v) {
     </form>
   </section>
 
+${isAdmin ? `
   <section class="card">
     <h2>Alertas de TradingView</h2>
     <p class="muted">Tu indicador de TradingView puede abrir y cerrar trades además de los setups propios del bot.
@@ -693,6 +725,18 @@ function viewConfig(v) {
     <h3 style="margin-top:16px">Últimas alertas recibidas</h3>
     <div id="tvLog" class="muted">Cargando…</div>
   </section>
+` : `
+  <section class="card">
+    <h2>📡 Alertas de trading</h2>
+    <p class="muted">Las alertas de TradingView las programa y mantiene el <b>administrador</b>. Cada vez que llega una,
+    el bot abre la operación también en <b>tu cuenta</b>, con tu broker, tu capital y tus límites, y la gestionan los mismos vigilantes.
+    Tú solo tienes que tener el broker conectado y el bot encendido.</p>
+    <label class="check"><span class="switch"><input type="checkbox" id="tvFollow" ${s.tv_follow !== false ? "checked" : ""}><span></span></span>
+      <span>${s.tv_follow !== false ? "Siguiendo las alertas del administrador" : "No sigo las alertas del administrador"}</span></label>
+    <h3 style="margin-top:16px">Últimas alertas en tu cuenta</h3>
+    <div id="tvLog" class="muted">Cargando…</div>
+  </section>
+`}
 
   <section class="card">
     <h2>🧪 Paper con precios reales</h2>
@@ -856,6 +900,15 @@ function tvMessage(_key, action) {
 }
 
 async function bindTradingView(v) {
+  const follow = $("#tvFollow");
+  if (follow) {
+    // Usuario (no admin): solo decide si sigue las alertas del administrador.
+    follow.onchange = async () => {
+      await saveSettings({ tv_follow: follow.checked });
+      toast(follow.checked ? "Siguiendo las alertas del administrador" : "Dejaste de seguir las alertas del administrador");
+    };
+    return loadTvLog("Todavía no llegó ninguna alerta a tu cuenta.");
+  }
   const toggle = $("#tvToggle");
   if (!toggle) return;
   toggle.onchange = async () => {
@@ -881,12 +934,17 @@ async function bindTradingView(v) {
     toast("Llave nueva generada: actualiza tus alertas");
     render();
   };
+  return loadTvLog("Todavía no llegan alertas. Crea una alerta en TradingView con el Webhook URL y el mensaje de arriba.");
+}
+
+async function loadTvLog(emptyMsg) {
   if (DEMO) return ($("#tvLog").innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
-  const { data } = await sb.from("tv_alerts").select("*").order("ts", { ascending: false }).limit(15);
+  // Solo las alertas de MI cuenta (el admin puede ver las de todos por RLS, pero aquí interesan las suyas).
+  const { data } = await sb.from("tv_alerts").select("*").eq("user_id", S.user.id).order("ts", { ascending: false }).limit(15);
   $("#tvLog").innerHTML = (data ?? []).length ? `<div class="table-wrap"><table><thead><tr><th>Hora (NY)</th><th>Activo</th><th>Acción</th><th>Resultado</th></tr></thead><tbody>
     ${data.map((a) => `<tr><td>${etDay(a.ts).slice(5)} ${etTime(a.ts)}</td><td><b>${esc(a.symbol)}</b></td><td>${esc(a.action)}</td>
       <td style="white-space:normal" class="${/^ENTRÓ|^Cerradas/.test(a.result ?? "") ? "pos" : /^ERROR/.test(a.result ?? "") ? "neg" : "muted"}">${esc(a.result)}</td></tr>`).join("")}
-    </tbody></table></div>` : `<div class="empty">Todavía no llegan alertas. Crea una alerta en TradingView con el Webhook URL y el mensaje de arriba.</div>`;
+    </tbody></table></div>` : `<div class="empty">${esc(emptyMsg)}</div>`;
 }
 
 function num(name, label, value, min, max, step) {
