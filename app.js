@@ -815,7 +815,7 @@ ${isAdmin ? `
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1" class="alert info">
         <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
-        no se abren trades en el almuerzo (11:30–13:30), ni en los primeros 15 minutos, ni después de las 15:15 ·
+        no se abren trades en la pausa del mediodía (11:00–14:00), ni en los primeros 15 minutos, ni después de las 15:15 ·
         nunca contratos fuera del dinero: solo en el dinero hasta 3% ITM, con el delta que más responde y luego el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato) · el 1H manda: si cambia de dirección se sale ·
         el día del vencimiento se cierra a las 15:30.
       </div>
