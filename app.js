@@ -549,6 +549,26 @@ function timeline(events) {
     `<li><span class="muted mono">${etTime(e.ts)}</span><span class="k-${esc(e.kind)}">${esc(e.message)}</span></li>`).join("")}</ul>`;
 }
 
+async function loadPending() {
+  const box = $("#pending");
+  if (!box) return;
+  if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  const since = new Date(Date.now() - 8 * 3600e3).toISOString();
+  const { data } = await sb.from("pending_entries").select("*").eq("user_id", S.user.id).gte("created_at", since)
+    .order("created_at", { ascending: false }).limit(15);
+  const label = { waiting: "⏳ Vigilando", entering: "⚡ Entrando", entered: "✅ Entró", cancelled: "✖ Descartada" };
+  box.innerHTML = data?.length ? `<div class="table-wrap"><table>
+    <thead><tr><th>Alerta</th><th>Activo</th><th>Dir</th><th class="num">Precio alerta</th><th class="num">Fondo pullback</th><th class="num">Invalida en</th><th>Estado</th><th>Detalle</th><th></th></tr></thead>
+    <tbody>${data.map((p) => `<tr><td>${etTime(p.created_at)}</td><td><b>${esc(p.symbol)}</b></td><td><span class="badge">${esc(p.dir)}</span></td>
+      <td class="num">${(+p.alert_price).toFixed(2)}</td><td class="num">${(+p.extreme).toFixed(2)}</td><td class="num">${(+p.invalid_price).toFixed(2)}</td>
+      <td>${label[p.status] ?? esc(p.status)}</td><td style="white-space:normal;min-width:220px" class="muted">${esc(p.reason ?? "")}</td>
+      <td>${p.status === "waiting" ? `<button class="btn sm danger" data-cancelpend="${p.id}">Cancelar</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty">Ninguna alerta en espera hoy.</div>`;
+  box.querySelectorAll("[data-cancelpend]").forEach((b) => (b.onclick = async () => {
+    try { await action({ action: "cancel_pending", id: +b.dataset.cancelpend }); toast("Entrada cancelada"); loadPending(); } catch (err) { toast(err.message); }
+  }));
+}
+
 function viewPositions(v) {
   const open = S.trades.filter((t) => t.status === "open");
   v.insertAdjacentHTML("beforeend", `
@@ -556,7 +576,11 @@ function viewPositions(v) {
     <h2 style="margin:0">Posiciones abiertas (${open.length})</h2><div class="spacer"></div>
     ${open.length ? `<button class="btn danger" id="closeAll">🛑 Cerrar todo</button>` : ""}
   </div>
-  ${open.length ? `<div class="grid cols-2">${open.map(posCard).join("")}</div>` : `<div class="card empty">No hay posiciones abiertas. El vigilante revisa cada 2 minutos cuando hay trades.</div>`}`);
+  ${open.length ? `<div class="grid cols-2">${open.map(posCard).join("")}</div>` : `<div class="card empty">No hay posiciones abiertas. El vigilante revisa cada 15 segundos cuando hay trades.</div>`}
+  <section class="card" style="margin-top:16px"><h2>⏳ Entradas en espera (agente de entrada)</h2>
+    <p class="muted">Alertas que llegaron en pullback o sin fuerza: el agente las vigila en velas de 1M y entra cuando el precio retoma la dirección. Se cancelan solas si el pullback rompe la estructura o vence el tiempo.</p>
+    <div id="pending" class="muted">Cargando…</div></section>`);
+  loadPending();
   v.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => closeTrade(+b.dataset.close)));
   const ca = $("#closeAll");
   if (ca) ca.onclick = async () => {
@@ -786,6 +810,10 @@ ${isAdmin ? `
       ${num("max_spread_usd", "Spread máx. por contrato (US$)", s.max_spread_usd ?? 10, 1, 500, 1)}
       ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 100, 1)}
       <div><label>Vencimiento del contrato</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>Mañana: mismo día · Tarde: día siguiente</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>Semanal (viernes)</option></select></div>
+      <div><label>Entrada de las alertas</label><select name="entry_mode">
+        <option value="smart" ${(s.entry_mode ?? "smart") === "smart" ? "selected" : ""}>Agente de entrada (espera pullback y confirmación)</option>
+        <option value="immediate" ${s.entry_mode === "immediate" ? "selected" : ""}>Inmediata (al llegar la alerta)</option></select></div>
+      ${num("entry_wait_min", "Espera máxima del agente (min)", s.entry_wait_min ?? 20, 2, 120, 1)}
       <div><label>Estilo de gestión</label><select name="trade_style"><option value="scalp" ${(s.trade_style ?? "scalp") === "scalp" ? "selected" : ""}>Scalping (5M · 15M · 1H)</option><option value="swing" ${s.trade_style === "swing" ? "selected" : ""}>Swing intradía (15M · 1H)</option></select></div>
       <div><label>Tipo de orden al comprar/vender</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
@@ -851,12 +879,13 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "entry_wait_min"]) patch[k] = Number(fd.get(k));
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
     patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
     patch.trade_style = fd.get("trade_style") === "swing" ? "swing" : "scalp";
+    patch.entry_mode = fd.get("entry_mode") === "immediate" ? "immediate" : "smart";
     patch.close_eod = true;
     patch.skip_lunch = true;
     patch.setups = fd.getAll("setup");
