@@ -222,8 +222,11 @@ function render() {
   S.charts = [];
   const st = S.settings ?? {};
   const isAdmin = S.profile?.role === "admin";
-  const tabs = [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["sig", "Señales"], ["ai", "Inteligencia"], ["cfg", "Configuración"]];
-  if (isAdmin) tabs.push(["admin", "Admin"]);
+  // Usuarios (no admin): solo lo básico. La estrategia y la configuración son del administrador.
+  const tabs = isAdmin
+    ? [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["sig", "Señales"], ["ai", "Inteligencia"], ["cfg", "Configuración"], ["admin", "Admin"]]
+    : [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["cfg", "Mi broker"]];
+  if (!tabs.some(([k]) => k === S.tab)) S.tab = "panel";
 
   $("#app").innerHTML = `
   <header class="top">
@@ -249,12 +252,12 @@ function render() {
 
   const view = $("#view");
   if (!S.profile?.approved) {
-    view.innerHTML = `<div class="alert info">Tu cuenta está pendiente de aprobación por el administrador. Mientras tanto puedes configurar tu broker y tu lista de activos.</div>`;
+    view.innerHTML = `<div class="alert info">Tu cuenta está pendiente de aprobación por el administrador. Mientras tanto puedes conectar tu broker en «Mi broker».</div>`;
     if (S.tab !== "cfg") return;
   }
   const banners = [];
   if (st.last_error) banners.push(`<div class="alert">⚠ ${esc(st.last_error)}</div>`);
-  if (!st.has_keys) banners.push(`<div class="alert info">👋 <b>Bienvenido a True TraderX.</b> Solo te falta un paso: conecta tu broker en <b>Configuración → Broker</b>. La estrategia, los stops y las alertas ya vienen configurados por el administrador, y el bot se enciende solo al conectar.</div>`);
+  if (!st.has_keys) banners.push(`<div class="alert info">👋 <b>Bienvenido a True TraderX.</b> Solo te falta un paso: conecta tu broker en <b>${isAdmin ? "Configuración → Broker" : "Mi broker"}</b>. La estrategia, los stops y las alertas ya vienen configurados por el administrador, y el bot se enciende solo al conectar.</div>`);
   view.insertAdjacentHTML("beforeend", banners.join(""));
   ({ panel: viewPanel, pos: viewPositions, hist: viewHistory, sig: viewSignals, ai: viewIntelligence, cfg: viewConfig, admin: viewAdmin })[S.tab](view);
 }
@@ -475,7 +478,7 @@ async function viewIntelligence(v) {
 async function bindPaper() {
   const box = $("#paperAcct");
   if (DEMO) return box && (box.textContent = "Disponible al conectar Supabase");
-  $("#paperEngine").onchange = async (e) => {
+  if ($("#paperEngine")) $("#paperEngine").onchange = async (e) => {
     await saveSettings({ paper_engine: e.target.value === "broker" ? "broker" : "internal" });
     toast("Motor del paper guardado (aplica a las entradas nuevas)");
   };
@@ -494,7 +497,7 @@ async function bindPaper() {
     if (!confirm("¿Quitar el token de datos? El paper volverá a precios retrasados.")) return;
     try { await action({ action: "delete_data_token" }); await loadAll(); render(); } catch (err) { toast(err.message); }
   });
-  $("#paperReset").onclick = async () => {
+  if ($("#paperReset")) $("#paperReset").onclick = async () => {
     const cash = Number($("#paperCash").value);
     if (!confirm(`¿Reiniciar la cuenta paper interna con ${usd(cash)}? Se borra su historial de órdenes (los trades del panel se conservan).`)) return;
     try { await action({ action: "paper_reset", cash }); toast("Cuenta paper reiniciada"); bindPaper(); } catch (err) { toast("Error: " + err.message, 6000); }
@@ -749,18 +752,7 @@ ${isAdmin ? `
     <h3 style="margin-top:16px">Últimas alertas recibidas</h3>
     <div id="tvLog" class="muted">Cargando…</div>
   </section>
-` : `
-  <section class="card">
-    <h2>📡 Alertas de trading</h2>
-    <p class="muted">Las alertas de TradingView las programa y mantiene el <b>administrador</b>. Cada vez que llega una,
-    el bot abre la operación también en <b>tu cuenta</b>, con tu broker, tu capital y tus límites, y la gestionan los mismos vigilantes.
-    Tú solo tienes que tener el broker conectado y el bot encendido.</p>
-    <label class="check"><span class="switch"><input type="checkbox" id="tvFollow" ${s.tv_follow !== false ? "checked" : ""}><span></span></span>
-      <span>${s.tv_follow !== false ? "Siguiendo las alertas del administrador" : "No sigo las alertas del administrador"}</span></label>
-    <h3 style="margin-top:16px">Últimas alertas en tu cuenta</h3>
-    <div id="tvLog" class="muted">Cargando…</div>
-  </section>
-`}
+` : ""}
 
   <section class="card">
     <h2>🧪 Paper con precios reales</h2>
@@ -769,20 +761,21 @@ ${isAdmin ? `
     Para precios en <b>tiempo real</b> pega el token de tu cuenta <b>real</b> de Tradier (Tradier → Settings → API Access → token de producción).
     Ese token solo se usa para <b>leer precios</b>: el bot nunca manda órdenes con él. Sin token usa los precios del sandbox (15 min tarde).</p>
     <div class="form">
-      <div><label>Motor del paper (entradas nuevas)</label><select id="paperEngine">
+      ${isAdmin ? `<div><label>Motor del paper (entradas nuevas)</label><select id="paperEngine">
         <option value="internal" ${(s.paper_engine ?? "internal") === "internal" ? "selected" : ""}>Paper interno (llenados simulados con precios reales)</option>
-        <option value="broker" ${s.paper_engine === "broker" ? "selected" : ""}>Sandbox de Tradier (precios 15 min tarde)</option></select></div>
+        <option value="broker" ${s.paper_engine === "broker" ? "selected" : ""}>Sandbox de Tradier (precios 15 min tarde)</option></select></div>` : ""}
       <div><label>Precios</label><div>${s.has_realtime ? `<span class="badge">✅ Tiempo real (Tradier producción)</span>` : `<span class="badge">⚠️ Retrasados 15 min (sandbox)</span>`}</div></div>
       <div style="grid-column:1/-1"><label>Token de datos de Tradier (producción, solo lectura de precios)</label>
         <div class="row"><input id="dataToken" type="password" class="mono" autocomplete="off" placeholder="${s.has_realtime ? "Guardado ✓ — pega otro para cambiarlo" : "Pega aquí tu token de producción"}" style="max-width:360px">
         <button type="button" class="btn sm" id="dataTokenSave">Guardar token</button>
         ${s.has_realtime ? `<button type="button" class="btn sm danger" id="dataTokenDel">Quitar</button>` : ""}</div></div>
       <div><label>Cuenta paper interna</label><div id="paperAcct" class="muted">Cargando…</div></div>
-      <div><label>Reiniciar con capital (US$)</label><div class="row"><input id="paperCash" type="number" min="1000" step="1000" value="100000" style="max-width:160px">
-        <button type="button" class="btn sm danger" id="paperReset">Reiniciar paper</button></div></div>
+      ${isAdmin ? `<div><label>Reiniciar con capital (US$)</label><div class="row"><input id="paperCash" type="number" min="1000" step="1000" value="100000" style="max-width:160px">
+        <button type="button" class="btn sm danger" id="paperReset">Reiniciar paper</button></div></div>` : ""}
     </div>
   </section>
 
+${isAdmin ? `
   <section class="card">
     <h2>Riesgo y contratos</h2>
     <form id="riskForm" class="form">
@@ -842,7 +835,9 @@ ${isAdmin ? `
         <a href="#" data-wtoggle="${w.id}" style="color:inherit;text-decoration:none" title="Activar/pausar">${esc(w.symbol)}</a>
         <a href="#" data-wdel="${w.id}" class="muted" style="margin-left:6px;text-decoration:none" title="Quitar">×</a>
       </span>`).join("") || `<span class="muted">Lista vacía</span>`}</div>
-  </section>`);
+  </section>` : `
+  <section class="card"><h2>⚙️ Estrategia y riesgo</h2>
+    <p class="muted">La estrategia, los stops, el tamaño de las posiciones y los activos los gestiona el <b>administrador</b> y se aplican a tu cuenta automáticamente. Tú solo necesitas tu broker conectado y el bot encendido.</p></section>`}`);
 
   const syncBroker = () => {
     const b = $("#brokerSel").value;
@@ -873,7 +868,7 @@ ${isAdmin ? `
     try { await action({ action: "delete_keys" }); await loadAll(); render(); } catch (err) { toast(err.message); }
   });
 
-  $("#riskForm").onsubmit = async (e) => {
+  if (isAdmin) $("#riskForm").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const patch = {};
@@ -898,7 +893,7 @@ ${isAdmin ? `
   bindPaper();
   bindTradingView(v);
 
-  $("#watchForm").onsubmit = async (e) => {
+  if (isAdmin) $("#watchForm").onsubmit = async (e) => {
     e.preventDefault();
     const symbol = new FormData(e.target).get("symbol").trim().toUpperCase();
     if (DEMO) { S.watch.push({ id: Date.now(), symbol, active: true }); return render(); }
