@@ -794,6 +794,9 @@ ${isAdmin ? `
       ${num("time_stop_min", "Cortar si no arranca en (min)", s.time_stop_min ?? 30, 10, 120, 5)}
       ${num("level_min_r", "Distancia mínima a techo/piso (R)", s.level_min_r ?? 0.25, 0.05, 1, 0.05)}
       ${num("min_profit_pct", "Ganancia mínima real de la opción para tomar ganancia (%)", s.min_profit_pct ?? 8, 0, 100, 1)}
+      ${num("lock_start_pct", "Candado de ganancia desde +% de la opción (0 = apagado)", s.lock_start_pct ?? 8, 0, 100, 1)}
+      ${num("lock_keep", "Parte del máximo que asegura el candado (0.5 = la mitad)", s.lock_keep ?? 0.5, 0.2, 0.9, 0.05)}
+      ${num("candle_trail", "Stop vela por vela desde × el candado (3 = +24%; 0 = nunca)", s.candle_trail ?? 3, 0, 10, 0.5)}
       <div><label>Agente investigador</label><select name="research_mode">
         <option value="auto" ${s.research_enabled !== false && s.research_auto !== false ? "selected" : ""}>Ajusta solo (automático)</option>
         <option value="suggest" ${s.research_enabled !== false && s.research_auto === false ? "selected" : ""}>Solo sugiere</option>
@@ -874,7 +877,7 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "entry_wait_min"]) patch[k] = Number(fd.get(k));
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
