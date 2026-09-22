@@ -430,6 +430,46 @@ function tradeFacts(t) {
     ${t.lesson ? `<div class="alert info" style="margin:0 0 8px">🧠 ${esc(t.lesson)}</div>` : ""}`;
 }
 
+async function bindPatterns() {
+  const btn = $("#patternsNow");
+  if (btn) {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = "Buscando…";
+      try {
+        const { data: r, error } = await sb.functions.invoke("patterns", { body: {} });
+        if (error) throw error;
+        toast(`Historiador: ${r.strong} patrones fuertes en ${r.symbols} activos`, 6000);
+        await paintPatterns();
+      } catch (err) {
+        toast("Error: " + err.message, 6000);
+      }
+      btn.disabled = false;
+      btn.textContent = "Buscar patrones ahora";
+    };
+  }
+  await paintPatterns();
+}
+
+async function paintPatterns() {
+  const box = $("#aiPatterns");
+  if (!box) return;
+  if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  const { data } = await sb.from("symbol_patterns").select("*").eq("strong", true).order("symbol").order("kind");
+  if (!data?.length) {
+    return (box.innerHTML = `<div class="empty">Todavía no hay patrones. El historiador corre después del cierre (5:10 PM NY) o puedes lanzarlo ahora.</div>`);
+  }
+  const bySym = {};
+  for (const p of data) (bySym[p.symbol] ??= []).push(p);
+  const icon = { hora: "🕐", dia: "📅", hueco: "🪜", racha: "🔁", extension: "🚀" };
+  box.innerHTML = `<div class="grid cols-2">${Object.entries(bySym).map(([sym, ps]) => `
+    <div><h3>${esc(sym)}</h3><ul style="margin:0;padding-left:18px">
+      ${ps.map((p) => `<li style="white-space:normal">${icon[p.kind] ?? "•"} ${esc(p.text)}</li>`).join("")}
+    </ul></div>`).join("")}</div>
+    <p class="muted" style="margin-top:10px">Solo se muestran los patrones con muestra suficiente (40 casos o más) y diferencia clara.
+    Última actualización: ${new Date(data[0].updated_at).toLocaleString("es")}</p>`;
+}
+
 async function viewIntelligence(v) {
   v.insertAdjacentHTML("beforeend", `
   <section class="card">
@@ -448,8 +488,18 @@ async function viewIntelligence(v) {
     (pérdida diaria, tamaño, horarios) nunca los toca.</p>
     <div id="aiResearch" class="muted">Cargando…</div>
   </section>
+  <section class="card">
+    <div class="row"><h2 style="margin:0">📚 Agente historiador</h2><div class="spacer"></div>
+      <button class="btn sm" id="patternsNow">Buscar patrones ahora</button></div>
+    <p class="muted">Cada tarde revisa 1 año de velas de 1 hora, 2 años de velas diarias y 60 días de 15 minutos de cada activo,
+    y anota los comportamientos que se repiten: a qué horas estira el movimiento y a cuáles lo devuelve, si los huecos de apertura
+    se rellenan, qué pasa tras dos días seguidos en la misma dirección. El vigilante usa ese contexto mientras la posición está abierta:
+    en las horas en las que el activo suele estirar deja correr más, y en las que suele devolver asegura antes.</p>
+    <div id="aiPatterns" class="muted">Cargando…</div>
+  </section>
   <section class="card"><h2>Lecciones recientes del analista</h2><div id="aiLessons"></div></section>`);
   bindResearch();
+  bindPatterns();
   const lessons = S.trades.filter((t) => t.lesson).slice(0, 15);
   $("#aiLessons").innerHTML = lessons.length
     ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Activo</th><th>Setup</th><th class="num">P&L</th><th class="num">MFE</th><th class="num">Dejado</th><th>Lección</th></tr></thead><tbody>
