@@ -122,3 +122,13 @@ tr.clickable:hover td { background: var(--panel-2); }
   header.top { padding: 10px 16px; }
   .kpi .v { font-size: 22px; }
 }
+
+/* Contraseña con botón para verla */
+.pass-wrap { position: relative; }
+.pass-wrap input { width: 100%; padding-right: 40px; }
+.pass-eye {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; cursor: pointer; font-size: 16px; line-height: 1;
+  padding: 4px 6px; opacity: .75;
+}
+.pass-eye:hover { opacity: 1; }

@@ -143,6 +143,28 @@ function subscribe() {
 }
 
 // ---------- autenticación ----------
+/** Campo de contraseña con botón de ojo para verla (evita errores al escribirla). */
+function passField(label, name, autocomplete) {
+  return `<div><label>${label}</label>
+    <div class="pass-wrap">
+      <input name="${name}" type="password" minlength="8" required autocomplete="${autocomplete}">
+      <button type="button" class="pass-eye" data-for="${name}" title="Ver u ocultar la contraseña" aria-label="Ver u ocultar la contraseña">👁</button>
+    </div></div>`;
+}
+
+/** Activa los botones de ojo de la pantalla actual. */
+function bindEyes() {
+  for (const b of document.querySelectorAll(".pass-eye")) {
+    b.onclick = () => {
+      const input = b.parentElement.querySelector("input");
+      const ver = input.type === "password";
+      input.type = ver ? "text" : "password";
+      b.textContent = ver ? "🙈" : "👁";
+      input.focus();
+    };
+  }
+}
+
 function renderAuth(mode = "login") {
   $("#app").innerHTML = `
   <div class="auth">
@@ -152,21 +174,29 @@ function renderAuth(mode = "login") {
       <form id="authForm" class="grid">
         ${mode === "signup" ? `<div><label>Nombre</label><input name="name" required></div>` : ""}
         <div><label>Email</label><input name="email" type="email" required autocomplete="email"></div>
-        <div><label>Contraseña</label><input name="password" type="password" minlength="8" required autocomplete="${mode === "login" ? "current-password" : "new-password"}"></div>
+        ${passField("Contraseña", "password", mode === "login" ? "current-password" : "new-password")}
         <button class="btn primary">${mode === "login" ? "Entrar" : "Registrarme"}</button>
       </form>
-      <p class="muted" style="margin-bottom:0">
-        ${mode === "login" ? `¿No tienes cuenta? <a href="#" id="swap">Regístrate</a> · <a href="#" id="forgot">¿Olvidaste tu contraseña?</a>` : `¿Ya tienes cuenta? <a href="#" id="swap">Entrar</a>`}
+      ${mode === "login" ? `<button class="btn" id="forgot" style="width:100%;margin-top:8px">🔑 Olvidé mi contraseña</button>` : ""}
+      <p class="muted" style="margin-bottom:0;margin-top:12px">
+        ${mode === "login" ? `¿No tienes cuenta? <a href="#" id="swap">Regístrate</a>` : `¿Ya tienes cuenta? <a href="#" id="swap">Entrar</a>`}
       </p>
     </div>
   </div>`;
+  bindEyes();
   $("#swap").onclick = (e) => { e.preventDefault(); renderAuth(mode === "login" ? "signup" : "login"); };
   $("#forgot")?.addEventListener("click", async (e) => {
     e.preventDefault();
-    const email = $("#authForm [name=email]").value.trim();
-    if (!email) return toast("Escribe tu email arriba y vuelve a pulsar «¿Olvidaste tu contraseña?»", 5000);
+    const campo = $("#authForm [name=email]");
+    const email = campo.value.trim();
+    if (!email) { campo.focus(); return toast("Escribe primero tu email aquí arriba y vuelve a pulsar el botón", 6000); }
+    const btn = $("#forgot");
+    btn.disabled = true;
+    btn.textContent = "Enviando…";
     const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-    toast(error ? authError(error.message) : "Te enviamos un correo para crear una contraseña nueva (revisa también spam)", 8000);
+    btn.disabled = false;
+    btn.textContent = "🔑 Olvidé mi contraseña";
+    toast(error ? authError(error.message) : `Te enviamos un correo a ${email} para crear una contraseña nueva (mira también la carpeta de spam)`, 9000);
   });
   $("#authForm").onsubmit = async (e) => {
     e.preventDefault();
@@ -197,12 +227,13 @@ function renderNewPassword() {
     <div class="card">
       <h2>Crea tu contraseña nueva</h2>
       <form id="pwForm" class="grid">
-        <div><label>Contraseña nueva (mínimo 8 caracteres)</label><input name="password" type="password" minlength="8" required autocomplete="new-password"></div>
-        <div><label>Repítela</label><input name="password2" type="password" minlength="8" required autocomplete="new-password"></div>
+        ${passField("Contraseña nueva (mínimo 8 caracteres)", "password", "new-password")}
+        ${passField("Repítela", "password2", "new-password")}
         <button class="btn primary">Guardar contraseña</button>
       </form>
     </div>
   </div>`;
+  bindEyes();
   $("#pwForm").onsubmit = async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
@@ -899,6 +930,7 @@ ${isAdmin ? `
       ${num("exit_volume_min", "Salida directa si el volumen 5M cae bajo (0 = apagada)", s.exit_volume_min ?? 0, 0, 3, 0.1)}
       ${num("fade_1m", "Salida rápida: vela de 1M en contra con volumen (× media, 0 = apagada)", s.fade_1m ?? 1.5, 0, 5, 0.1)}
       ${num("peak_giveback", "Venta en el pico: puntos de % que se puede devolver (0 = apagada)", s.peak_giveback ?? 5, 0, 50, 1)}
+      ${num("event_block_min", "No abrir X minutos antes de un dato de alto impacto (0 = apagado)", s.event_block_min ?? 15, 0, 120, 5)}
       <div><label>Venta en el pico: exigir señal de clímax</label><select name="peak_confirm">
         <option value="si" ${s.peak_confirm === false ? "" : "selected"}>Sí (recomendado: no corta en cada respiro)</option>
         <option value="no" ${s.peak_confirm === false ? "selected" : ""}>No, vender en cuanto devuelva</option></select></div>
@@ -990,7 +1022,7 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "entry_pullback_atr", "entry_chase_max", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
