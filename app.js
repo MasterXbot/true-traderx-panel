@@ -850,6 +850,12 @@ ${isAdmin ? `
       ${num("ema_stop_1m", "Invalidación por EMA de 1M: minutos de aire (0 = apagada)", s.ema_stop_1m ?? 5, 0, 60, 1)}
       ${num("ema_stop_atr", "Margen de ruptura de la EMA de 1M (ATR)", s.ema_stop_atr ?? 0.15, 0, 2, 0.05)}
       ${num("ema_stop_peak_r", "La invalidación solo aplica hasta +R de avance", s.ema_stop_peak_r ?? 0.35, 0, 2, 0.05)}
+      ${num("entry_vol_min", "Entrada: rango mínimo de la vela de 1M (1 = su rango normal)", s.entry_vol_min ?? 1, 0, 5, 0.1)}
+      ${num("entry_volume_min", "Entrada: volumen mínimo de la vela de 1M (1.2 = 20% sobre lo normal)", s.entry_volume_min ?? 1.2, 0, 5, 0.1)}
+      ${num("max_stop_premium_pct", "Descartar contrato si el stop costaría más del % de la prima", s.max_stop_premium_pct ?? 45, 10, 100, 5)}
+      <div><label>Vencimientos del mismo día (0DTE)</label><select name="allow_0dte">
+        <option value="no" ${s.allow_0dte ? "" : "selected"}>No (recomendado: primas muy sensibles)</option>
+        <option value="si" ${s.allow_0dte ? "selected" : ""}>Sí, permitir por la mañana</option></select></div>
       <div><label>Agente investigador</label><select name="research_mode">
         <option value="auto" ${s.research_enabled !== false && s.research_auto !== false ? "selected" : ""}>Ajusta solo (automático)</option>
         <option value="suggest" ${s.research_enabled !== false && s.research_auto === false ? "selected" : ""}>Solo sugiere</option>
@@ -930,7 +936,8 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+    patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
