@@ -857,6 +857,10 @@ ${isAdmin ? `
       ${num("lock_tighten", "Salida: apretar el candado cuando se apaga el volumen", s.lock_tighten ?? 0.15, 0, 0.5, 0.05)}
       ${num("exit_volume_min", "Salida directa si el volumen 5M cae bajo (0 = apagada)", s.exit_volume_min ?? 0, 0, 3, 0.1)}
       ${num("fade_1m", "Salida rápida: vela de 1M en contra con volumen (× media, 0 = apagada)", s.fade_1m ?? 1.5, 0, 5, 0.1)}
+      ${num("peak_giveback", "Venta en el pico: puntos de % que se puede devolver (0 = apagada)", s.peak_giveback ?? 5, 0, 50, 1)}
+      <div><label>Venta en el pico: exigir señal de clímax</label><select name="peak_confirm">
+        <option value="si" ${s.peak_confirm === false ? "" : "selected"}>Sí (recomendado: no corta en cada respiro)</option>
+        <option value="no" ${s.peak_confirm === false ? "selected" : ""}>No, vender en cuanto devuelva</option></select></div>
       ${num("entry_pullback_atr", "Retroceso mínimo para considerarlo pullback (ATR de 5M)", s.entry_pullback_atr ?? 0.3, 0, 2, 0.05)}
       ${num("entry_chase_max", "No perseguir: máximo sobre el fondo del pullback (ATR de 5M)", s.entry_chase_max ?? 0.75, 0.1, 5, 0.05)}
       <div><label>Entrada en la ruptura (sin esperar el cierre de la vela de 1M)</label><select name="entry_intrabar">
@@ -945,9 +949,10 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "entry_pullback_atr", "entry_chase_max", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "entry_pullback_atr", "entry_chase_max", "entry_wait_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
+    patch.peak_confirm = fd.get("peak_confirm") !== "no";
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
