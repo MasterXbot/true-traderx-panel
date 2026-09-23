@@ -317,6 +317,41 @@ function kpi(label, value, sub = "", klass = "") {
 }
 
 // ---------- vistas ----------
+/** Calendario económico de la semana: lo llena cada mañana el agente de calendario. */
+async function loadCalendario() {
+  const box = $("#calendario");
+  if (!box) return;
+  if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })).toISOString().slice(0, 10);
+  const { data } = await sb.from("calendar_events").select("*").gte("day", hoy).order("day").order("time_et");
+  if (!data?.length) {
+    return (box.innerHTML = `<div class="empty">Todavía no hay eventos cargados. El calendario se actualiza cada mañana a las 6:40 AM NY.</div>`);
+  }
+  // Solo lo que importa: eventos fuertes y resultados de nuestros activos; el resto se resume.
+  const fuertes = data.filter((e) => e.importance >= 3);
+  const medios = data.filter((e) => e.importance === 2);
+  const porDia = {};
+  for (const e of [...fuertes, ...medios]) (porDia[e.day] ??= []).push(e);
+  const nombreDia = (d) => {
+    const f = new Date(d + "T12:00:00Z");
+    const txt = f.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
+    return d === hoy ? `HOY · ${txt}` : txt;
+  };
+  const icono = (e) => e.kind === "earnings" ? "💰" : e.importance >= 3 ? "🔴" : "🟡";
+  box.innerHTML = Object.entries(porDia).slice(0, 6).map(([dia, evs]) => `
+    <div style="margin-bottom:10px">
+      <div style="${dia === hoy ? "color:#f59e0b;font-weight:600" : "color:#8b98a8"};text-transform:capitalize">${nombreDia(dia)}</div>
+      <ul style="margin:4px 0 0;padding-left:18px">
+        ${evs.slice(0, 6).map((e) => `<li style="white-space:normal">${icono(e)} <b>${e.time_et}</b> — ${esc(e.title)}${e.symbol ? ` (${esc(e.symbol)})` : ""}${e.consensus ? ` · previsto ${esc(e.consensus)}` : ""}</li>`).join("")}
+      </ul>
+    </div>`).join("") ||
+    `<div class="empty">Semana tranquila: ningún evento importante.</div>`;
+  const hoyFuertes = fuertes.filter((e) => e.day === hoy).length;
+  $("#calMeta").textContent = hoyFuertes
+    ? `${hoyFuertes} evento${hoyFuertes > 1 ? "s" : ""} importante${hoyFuertes > 1 ? "s" : ""} hoy`
+    : "sin eventos importantes hoy";
+}
+
 function viewPanel(v) {
   const k = computeStats(S.trades);
   const days = Object.entries(k.byDay).slice(-30);
@@ -333,9 +368,15 @@ function viewPanel(v) {
     <div class="card"><h3>Trades y P&L por día</h3><div class="chart-box"><canvas id="chDays"></canvas></div></div>
   </section>
   <section class="card">
+    <div class="row"><h3 style="margin:0">📅 Calendario de la semana</h3><div class="spacer"></div>
+      <span class="muted" id="calMeta"></span></div>
+    <div id="calendario" class="muted">Cargando…</div>
+  </section>
+  <section class="card">
     <h3>Últimas operaciones</h3>
     ${tradesTable(S.trades.slice(0, 8))}
   </section>`);
+  loadCalendario();
 
   if (!window.Chart) return;
   Chart.defaults.color = "#8b98a8";
