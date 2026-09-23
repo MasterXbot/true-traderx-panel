@@ -132,3 +132,35 @@ tr.clickable:hover td { background: var(--panel-2); }
   padding: 4px 6px; opacity: .75;
 }
 .pass-eye:hover { opacity: 1; }
+
+/* ---------- Calendario compacto ---------- */
+.cal-card { padding: 12px 14px; }
+.cal-card h3 { font-size: 13px; letter-spacing: .3px; text-transform: uppercase; color: var(--muted); }
+.sm { font-size: 12px; }
+
+.cal-strip { display: flex; gap: 6px; margin: 10px 0 8px; }
+.cal-day {
+  flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px 2px 5px; cursor: pointer; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; gap: 1px; transition: border-color .15s, background .15s;
+}
+.cal-day:hover { border-color: #3a4a60; }
+.cal-day.sel { border-color: var(--accent); background: rgba(245, 158, 11, .08); }
+.cal-day.hoy .cal-num { color: var(--accent); }
+.cal-dow { font-size: 10px; color: var(--muted); letter-spacing: .5px; }
+.cal-num { font-size: 16px; font-weight: 700; line-height: 1.1; }
+.cal-dots { display: flex; gap: 3px; height: 6px; align-items: center; }
+
+.dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.alta { background: var(--red); }
+.dot.media { background: var(--accent); }
+.dot.earn { background: var(--blue); }
+
+.cal-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin: 2px 0 4px; }
+.cal-ev { display: flex; align-items: center; gap: 7px; padding: 3px 0; font-size: 12px; line-height: 1.35; }
+.cal-hora { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; }
+.cal-txt { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Récord diario */
+.rec-w { color: var(--green); }
+.rec-l { color: var(--red); }

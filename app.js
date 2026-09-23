@@ -328,7 +328,13 @@ function computeStats(trades) {
     d.pnl += +t.realized_pnl + (t.status === "open" ? +(t.unrealized_pnl ?? 0) : 0);
     if (t.status === "closed" && +t.realized_pnl > 0) d.wins++;
   }
+  const cerradasHoy = todays.filter((t) => t.status === "closed");
+  const ganadasHoy = cerradasHoy.filter((t) => +t.realized_pnl > 0).length;
   return {
+    ganadasHoy,
+    perdidasHoy: cerradasHoy.length - ganadasHoy,
+    winRateHoy: cerradasHoy.length ? (ganadasHoy / cerradasHoy.length) * 100 : null,
+    abiertasHoy: todays.filter((t) => t.status === "open").length,
     total: closed.reduce((s, t) => s + +t.realized_pnl, 0),
     today: todays.reduce((s, t) => s + +t.realized_pnl + (t.status === "open" ? +(t.unrealized_pnl ?? 0) : 0), 0),
     tradesToday: todays.length,
@@ -348,39 +354,55 @@ function kpi(label, value, sub = "", klass = "") {
 }
 
 // ---------- vistas ----------
-/** Calendario económico de la semana: lo llena cada mañana el agente de calendario. */
+/** Calendario económico: tira de días de la semana; al tocar un día se ven sus eventos. */
 async function loadCalendario() {
   const box = $("#calendario");
   if (!box) return;
   if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
-  const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })).toISOString().slice(0, 10);
+  const hoy = etDay(new Date().toISOString());
   const { data } = await sb.from("calendar_events").select("*").gte("day", hoy).order("day").order("time_et");
   if (!data?.length) {
-    return (box.innerHTML = `<div class="empty">Todavía no hay eventos cargados. El calendario se actualiza cada mañana a las 6:40 AM NY.</div>`);
+    return (box.innerHTML = `<div class="empty">Sin eventos cargados. Se actualiza cada mañana a las 6:40 AM NY.</div>`);
   }
-  // Solo lo que importa: eventos fuertes y resultados de nuestros activos; el resto se resume.
-  const fuertes = data.filter((e) => e.importance >= 3);
-  const medios = data.filter((e) => e.importance === 2);
   const porDia = {};
-  for (const e of [...fuertes, ...medios]) (porDia[e.day] ??= []).push(e);
-  const nombreDia = (d) => {
+  for (const e of data) (porDia[e.day] ??= []).push(e);
+  const dias = Object.keys(porDia).slice(0, 5);
+  const LETRA = ["D", "L", "M", "X", "J", "V", "S"];
+  const chip = (d) => {
     const f = new Date(d + "T12:00:00Z");
-    const txt = f.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
-    return d === hoy ? `HOY · ${txt}` : txt;
+    const evs = porDia[d];
+    const fuerte = evs.some((e) => e.importance >= 3 && e.kind === "macro");
+    const earn = evs.some((e) => e.kind === "earnings");
+    const medio = evs.some((e) => e.importance === 2);
+    return `<button class="cal-day${d === hoy ? " hoy" : ""}" data-dia="${d}">
+      <span class="cal-dow">${LETRA[f.getUTCDay()]}</span>
+      <span class="cal-num">${f.getUTCDate()}</span>
+      <span class="cal-dots">${fuerte ? '<i class="dot alta"></i>' : ""}${earn ? '<i class="dot earn"></i>' : ""}${!fuerte && !earn && medio ? '<i class="dot media"></i>' : ""}</span>
+    </button>`;
   };
-  const icono = (e) => e.kind === "earnings" ? "💰" : e.importance >= 3 ? "🔴" : "🟡";
-  box.innerHTML = Object.entries(porDia).slice(0, 6).map(([dia, evs]) => `
-    <div style="margin-bottom:10px">
-      <div style="${dia === hoy ? "color:#f59e0b;font-weight:600" : "color:#8b98a8"};text-transform:capitalize">${nombreDia(dia)}</div>
-      <ul style="margin:4px 0 0;padding-left:18px">
-        ${evs.slice(0, 6).map((e) => `<li style="white-space:normal">${icono(e)} <b>${e.time_et}</b> — ${esc(e.title)}${e.symbol ? ` (${esc(e.symbol)})` : ""}${e.consensus ? ` · previsto ${esc(e.consensus)}` : ""}</li>`).join("")}
-      </ul>
-    </div>`).join("") ||
-    `<div class="empty">Semana tranquila: ningún evento importante.</div>`;
-  const hoyFuertes = fuertes.filter((e) => e.day === hoy).length;
-  $("#calMeta").textContent = hoyFuertes
-    ? `${hoyFuertes} evento${hoyFuertes > 1 ? "s" : ""} importante${hoyFuertes > 1 ? "s" : ""} hoy`
-    : "sin eventos importantes hoy";
+  box.innerHTML = `<div class="cal-strip">${dias.map(chip).join("")}</div><div class="cal-list" id="calLista"></div>`;
+
+  const pinta = (d) => {
+    for (const b of box.querySelectorAll(".cal-day")) b.classList.toggle("sel", b.dataset.dia === d);
+    const evs = (porDia[d] ?? []).filter((e) => e.importance >= 2).slice(0, 5);
+    const f = new Date(d + "T12:00:00Z");
+    const titulo = d === hoy ? "Hoy" : f.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
+    $("#calLista").innerHTML = evs.length
+      ? `<div class="cal-tit">${titulo}</div>` + evs.map((e) => `
+        <div class="cal-ev">
+          <span class="cal-hora">${esc(e.time_et.replace("todo el día", "—"))}</span>
+          <i class="dot ${e.kind === "earnings" ? "earn" : e.importance >= 3 ? "alta" : "media"}"></i>
+          <span class="cal-txt">${esc(e.symbol ? `${e.symbol}: resultados` : e.title)}</span>
+        </div>`).join("")
+      : `<div class="cal-tit">${titulo}</div><div class="cal-ev muted">Sin eventos relevantes</div>`;
+  };
+  for (const b of box.querySelectorAll(".cal-day")) b.onclick = () => pinta(b.dataset.dia);
+  pinta(dias.includes(hoy) ? hoy : dias[0]);
+
+  const fuertesHoy = (porDia[hoy] ?? []).filter((e) => e.importance >= 3).length;
+  $("#calMeta").innerHTML = fuertesHoy
+    ? `<i class="dot alta"></i> ${fuertesHoy} evento${fuertesHoy > 1 ? "s" : ""} clave hoy`
+    : "día tranquilo";
 }
 
 function viewPanel(v) {
@@ -390,7 +412,11 @@ function viewPanel(v) {
   <section class="grid kpis">
     ${kpi("P&L hoy", usd(k.today), `${k.tradesToday} trades hoy`, cls(k.today))}
     ${kpi("P&L total", usd(k.total), `${k.closed} trades cerrados`, cls(k.total))}
-    ${kpi("Win rate", k.winRate == null ? "—" : k.winRate.toFixed(0) + "%", `Factor de beneficio ${k.pf ? k.pf.toFixed(2) : "—"}`)}
+    ${kpi(
+      "Récord de hoy",
+      `<span class="rec-w">${k.ganadasHoy}G</span> · <span class="rec-l">${k.perdidasHoy}P</span>${k.abiertasHoy ? ` · <span class="muted">${k.abiertasHoy} abierta${k.abiertasHoy > 1 ? "s" : ""}</span>` : ""}`,
+      k.winRateHoy == null ? "Sin cerradas hoy" : `${k.winRateHoy.toFixed(0)}% hoy · ${k.winRate.toFixed(0)}% histórico · factor ${k.pf ? k.pf.toFixed(2) : "—"}`,
+    )}
     ${kpi("Abiertas", k.open, `Flotante ${usd(k.unreal)}`, cls(k.unreal))}
     ${kpi("Ganancia media", usd(k.avgWin), `Pérdida media ${usd(k.avgLoss)}`)}
   </section>
@@ -398,10 +424,10 @@ function viewPanel(v) {
     <div class="card"><h3>P&L acumulado</h3><div class="chart-box"><canvas id="chEquity"></canvas></div></div>
     <div class="card"><h3>Trades y P&L por día</h3><div class="chart-box"><canvas id="chDays"></canvas></div></div>
   </section>
-  <section class="card">
-    <div class="row"><h3 style="margin:0">📅 Calendario de la semana</h3><div class="spacer"></div>
-      <span class="muted" id="calMeta"></span></div>
-    <div id="calendario" class="muted">Cargando…</div>
+  <section class="card cal-card">
+    <div class="row"><h3 style="margin:0">Calendario</h3><div class="spacer"></div>
+      <span class="muted sm" id="calMeta"></span></div>
+    <div id="calendario" class="muted sm">Cargando…</div>
   </section>
   <section class="card">
     <h3>Últimas operaciones</h3>
