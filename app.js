@@ -856,6 +856,10 @@ ${isAdmin ? `
       ${num("hold_volume", "Salida: aguantar mientras el volumen 5M supere (× su media)", s.hold_volume ?? 1.2, 0, 5, 0.1)}
       ${num("lock_tighten", "Salida: apretar el candado cuando se apaga el volumen", s.lock_tighten ?? 0.15, 0, 0.5, 0.05)}
       ${num("exit_volume_min", "Salida directa si el volumen 5M cae bajo (0 = apagada)", s.exit_volume_min ?? 0, 0, 3, 0.1)}
+      ${num("fade_1m", "Salida rápida: vela de 1M en contra con volumen (× media, 0 = apagada)", s.fade_1m ?? 1.5, 0, 5, 0.1)}
+      <div><label>Entrada en la ruptura (sin esperar el cierre de la vela de 1M)</label><select name="entry_intrabar">
+        <option value="si" ${s.entry_intrabar === false ? "" : "selected"}>Sí (recomendado: entra antes)</option>
+        <option value="no" ${s.entry_intrabar === false ? "selected" : ""}>No, esperar el cierre</option></select></div>
       <div><label>Vencimientos del mismo día (0DTE)</label><select name="allow_0dte">
         <option value="no" ${s.allow_0dte ? "" : "selected"}>No (recomendado: primas muy sensibles)</option>
         <option value="si" ${s.allow_0dte ? "selected" : ""}>Sí, permitir por la mañana</option></select></div>
@@ -939,8 +943,9 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "entry_wait_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
+    patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
