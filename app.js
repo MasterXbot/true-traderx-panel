@@ -929,7 +929,7 @@ ${isAdmin ? `
     <form id="riskForm" class="form">
       ${num("alloc_pct", "% del capital por trade", s.alloc_pct, 0.5, 50, 0.5)}
       ${num("max_contracts", "Máx. contratos por trade", s.max_contracts, 1, 500, 1)}
-      ${num("max_open_positions", "Máx. posiciones abiertas", s.max_open_positions, 1, 20, 1)}
+      ${num("max_open_positions", "Máx. posiciones abiertas a la vez (0 = sin límite: manda el capital libre)", s.max_open_positions, 0, 20, 1)}
       ${num("max_trades_per_day", "Máx. trades por día (0 = sin límite)", s.max_trades_per_day, 0, 500, 1)}
       ${num("daily_loss_limit_pct", "Pérdida diaria máx. (%)", s.daily_loss_limit_pct, 0.5, 100, 0.5)}
       ${num("option_stop_pct", "Stop de prima (%)", s.option_stop_pct, 5, 100, 1)}
