@@ -957,6 +957,9 @@ ${isAdmin ? `
       ${num("fade_1m", "Salida rápida: vela de 1M en contra con volumen (× media, 0 = apagada)", s.fade_1m ?? 1.5, 0, 5, 0.1)}
       ${num("peak_giveback", "Venta en el pico: puntos de % que se puede devolver (0 = apagada)", s.peak_giveback ?? 5, 0, 50, 1)}
       ${num("event_block_min", "No abrir X minutos antes de un dato de alto impacto (0 = apagado)", s.event_block_min ?? 15, 0, 120, 5)}
+      <div><label>Días de resultados del activo</label><select name="earnings_block">
+        <option value="si" ${s.earnings_block === false ? "" : "selected"}>Esperar al reporte y operar después (recomendado)</option>
+        <option value="no" ${s.earnings_block === false ? "selected" : ""}>Operar igual, sin mirar los resultados</option></select></div>
       <div><label>Venta en el pico: exigir señal de clímax</label><select name="peak_confirm">
         <option value="si" ${s.peak_confirm === false ? "" : "selected"}>Sí (recomendado: no corta en cada respiro)</option>
         <option value="no" ${s.peak_confirm === false ? "selected" : ""}>No, vender en cuanto devuelva</option></select></div>
@@ -1052,6 +1055,7 @@ ${isAdmin ? `
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
+    patch.earnings_block = fd.get("earnings_block") !== "no";
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
