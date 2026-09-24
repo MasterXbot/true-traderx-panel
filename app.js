@@ -962,6 +962,9 @@ ${isAdmin ? `
       <div><label>Días de resultados del activo</label><select name="earnings_block">
         <option value="si" ${s.earnings_block === false ? "" : "selected"}>Esperar al reporte y operar después (recomendado)</option>
         <option value="no" ${s.earnings_block === false ? "selected" : ""}>Operar igual, sin mirar los resultados</option></select></div>
+      <div><label>La estructura manda sobre el porcentaje</label><select name="structure_first">
+        <option value="si" ${s.structure_first === false ? "" : "selected"}>Sí: mientras el precio construya, no cierra por %</option>
+        <option value="no" ${s.structure_first === false ? "selected" : ""}>No: manda el porcentaje</option></select></div>
       <div><label>Venta en el pico: exigir señal de clímax</label><select name="peak_confirm">
         <option value="si" ${s.peak_confirm === false ? "" : "selected"}>Sí (recomendado: no corta en cada respiro)</option>
         <option value="no" ${s.peak_confirm === false ? "selected" : ""}>No, vender en cuanto devuelva</option></select></div>
@@ -1057,6 +1060,7 @@ ${isAdmin ? `
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
+    patch.structure_first = fd.get("structure_first") !== "no";
     patch.earnings_block = fd.get("earnings_block") !== "no";
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
