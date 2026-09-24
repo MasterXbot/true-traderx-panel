@@ -933,6 +933,7 @@ ${isAdmin ? `
       ${num("max_trades_per_day", "Máx. trades por día (0 = sin límite)", s.max_trades_per_day, 0, 500, 1)}
       ${num("daily_loss_limit_pct", "Pérdida diaria máx. (%)", s.daily_loss_limit_pct, 0.5, 100, 0.5)}
       ${num("option_stop_pct", "Stop de prima (%)", s.option_stop_pct, 5, 100, 1)}
+      ${num("min_dte", "Vencimiento mínimo en días (5 = nunca contratos cortos)", s.min_dte ?? 5, 0, 60, 1)}
       ${num("delta_min", "Delta mínimo (ATM ≈ 0.50)", s.delta_min, 0.05, 0.95, 0.01)}
       ${num("delta_max", "Delta máximo (en el dinero ≈ 0.70)", s.delta_max, 0.05, 0.95, 0.01)}
       ${num("partial_r", "Asegurar 50% en +R (0 = dejar correr todo)", s.partial_r ?? 0.5, 0, 5, 0.25)}
@@ -1050,7 +1051,7 @@ ${isAdmin ? `
     const fd = new FormData(e.target);
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
-      "delta_min", "delta_max", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
+      "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
       "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
