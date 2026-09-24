@@ -951,7 +951,10 @@ ${isAdmin ? `
       ${num("ema_stop_peak_r", "La invalidación solo aplica hasta +R de avance", s.ema_stop_peak_r ?? 0.35, 0, 2, 0.05)}
       ${num("entry_vol_min", "Entrada: rango mínimo de la vela de 1M (1 = su rango normal)", s.entry_vol_min ?? 1, 0, 5, 0.1)}
       ${num("entry_volume_min", "Entrada: volumen mínimo de la vela de 1M (1.3 = 30% sobre lo normal)", s.entry_volume_min ?? 1.3, 0, 5, 0.1)}
-      ${num("alert_open_min", "Alertas: minuto de inicio (575 = 9:35; los setups propios siguen a las 9:45)", s.alert_open_min ?? 575, 570, 660, 5)}
+      ${num("alert_open_min", "Horario · alertas: minuto de inicio (570 = 9:30, 575 = 9:35)", s.alert_open_min ?? 575, 570, 660, 5)}
+      ${num("scan_open_min", "Horario · scanner: minuto de inicio (585 = 9:45)", s.scan_open_min ?? 585, 570, 660, 5)}
+      ${num("scan_second_min", "Horario · scanner: desde cuándo operan los setups que no son Vela Maestra (600 = 10:00)", s.scan_second_min ?? 600, 570, 660, 5)}
+      ${num("entry_last_min", "Horario · último minuto con entradas nuevas (915 = 15:15, 935 = 15:35)", s.entry_last_min ?? 915, 780, 945, 5)}
       ${num("max_stop_premium_pct", "Descartar contrato si el stop costaría más del % de la prima", s.max_stop_premium_pct ?? 45, 10, 100, 5)}
       ${num("hold_volume", "Salida: aguantar mientras el volumen 5M supere (× su media)", s.hold_volume ?? 1.2, 0, 5, 0.1)}
       ${num("lock_tighten", "Salida: apretar el candado cuando se apaga el volumen", s.lock_tighten ?? 0.15, 0, 0.5, 0.05)}
@@ -994,10 +997,11 @@ ${isAdmin ? `
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1" class="alert info">
         <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
-        no se abren trades en la pausa del mediodía (11:00–14:00), ni en los primeros 15 minutos, ni después de las 15:15 ·
+        el horario de entradas se ajusta arriba (inicio, pausa del mediodía y último minuto) ·
         nunca contratos fuera del dinero: solo en el dinero hasta 3% ITM, con el delta que más responde y luego el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato) · el 1H manda: si cambia de dirección se sale ·
         el día del vencimiento se cierra a las 15:30.
       </div>
+      <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía (11:00–14:00 NY, sin entradas nuevas)</label></div>
       <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
         ${Object.entries(SETUPS).map(([k, n]) => `<label class="check"><input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}> ${n}</label>`).join("")}
       </div></div>
@@ -1056,7 +1060,7 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
@@ -1069,7 +1073,7 @@ ${isAdmin ? `
     patch.trade_style = fd.get("trade_style") === "swing" ? "swing" : "scalp";
     patch.entry_mode = fd.get("entry_mode") === "immediate" ? "immediate" : "smart";
     patch.close_eod = true;
-    patch.skip_lunch = true;
+    patch.skip_lunch = fd.get("skip_lunch") === "on";
     patch.setups = fd.getAll("setup");
     if (patch.delta_min >= patch.delta_max) return toast("El delta mínimo debe ser menor que el máximo");
     if (patch.dte_min > patch.dte_max) return toast("Revisa el rango de vencimiento");
