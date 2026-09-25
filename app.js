@@ -953,6 +953,7 @@ ${isAdmin ? `
       ${num("entry_volume_min", "Entrada: volumen mínimo de la vela de 1M (1.3 = 30% sobre lo normal)", s.entry_volume_min ?? 1.3, 0, 5, 0.1)}
       ${num("alert_open_min", "Horario · alertas: minuto de inicio (570 = 9:30, 575 = 9:35)", s.alert_open_min ?? 575, 570, 660, 5)}
       ${num("scan_open_min", "Horario · scanner: minuto de inicio (585 = 9:45)", s.scan_open_min ?? 585, 570, 660, 5)}
+      ${num("alert_time_stop_min", "Corte por tiempo de las alertas (min; los setups usan el suyo)", s.alert_time_stop_min ?? 10, 5, 60, 1)}
       ${num("scan_second_min", "Horario · scanner: desde cuándo operan los setups que no son Vela Maestra (600 = 10:00)", s.scan_second_min ?? 600, 570, 660, 5)}
       ${num("entry_last_min", "Horario · último minuto con entradas nuevas (915 = 15:15, 935 = 15:35)", s.entry_last_min ?? 915, 780, 945, 5)}
       ${num("max_stop_premium_pct", "Descartar contrato si el stop costaría más del % de la prima", s.max_stop_premium_pct ?? 45, 10, 100, 5)}
@@ -1004,7 +1005,8 @@ ${isAdmin ? `
         nunca contratos fuera del dinero: solo en el dinero hasta 3% ITM, con el delta que más responde y luego el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato o el ${esc(S.settings?.spread_premium_pct ?? 2)}% de la prima en las caras) · el 1H manda: si cambia de dirección se sale ·
         el día del vencimiento se cierra a las 15:30.
       </div>
-      <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía (11:00–14:00 NY, sin entradas nuevas)</label></div>
+      <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía para las ALERTAS (11:00–14:00 NY)</label>
+      <label class="check"><input type="checkbox" name="scan_skip_lunch" ${s.scan_skip_lunch === true ? "checked" : ""}> Pausa del mediodía para el SCANNER (medido: le cuesta dinero)</label></div>
       <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
         ${Object.entries(SETUPS).map(([k, n]) => `<label class="check"><input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}> ${n}</label>`).join("")}
       </div></div>
@@ -1063,7 +1065,7 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min", "alert_time_stop_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
@@ -1077,6 +1079,7 @@ ${isAdmin ? `
     patch.entry_mode = fd.get("entry_mode") === "immediate" ? "immediate" : "smart";
     patch.close_eod = true;
     patch.skip_lunch = fd.get("skip_lunch") === "on";
+    patch.scan_skip_lunch = fd.get("scan_skip_lunch") === "on";
     patch.setups = fd.getAll("setup");
     if (patch.delta_min >= patch.delta_max) return toast("El delta mínimo debe ser menor que el máximo");
     if (patch.dte_min > patch.dte_max) return toast("Revisa el rango de vencimiento");
