@@ -986,6 +986,9 @@ ${isAdmin ? `
       ${num("dte_min", "Vencimiento mín. (días)", s.dte_min, 0, 30, 1)}
       ${num("dte_max", "Vencimiento máx. (días)", s.dte_max, 0, 45, 1)}
       ${num("max_spread_usd", "Spread máx. por contrato (US$)", s.max_spread_usd ?? 10, 1, 500, 1)}
+      ${num("spread_premium_pct", "…o hasta este % de la prima si la opción es cara (2 = 2%)", s.spread_premium_pct ?? 2, 0, 20, 0.5)}
+      ${num("min_open_interest", "Interés abierto mínimo del contrato", s.min_open_interest ?? 1000, 0, 100000, 100)}
+      ${num("min_volume", "Volumen del día mínimo (se exige en proporción a la sesión)", s.min_volume ?? 500, 0, 100000, 100)}
       ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 100, 1)}
       <div><label>Vencimiento del contrato</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>Mañana: mismo día · Tarde: día siguiente</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>Semanal (viernes)</option></select></div>
       <div><label>Entrada de las alertas</label><select name="entry_mode">
@@ -998,7 +1001,7 @@ ${isAdmin ? `
       <div style="grid-column:1/-1" class="alert info">
         <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
         el horario de entradas se ajusta arriba (inicio, pausa del mediodía y último minuto) ·
-        nunca contratos fuera del dinero: solo en el dinero hasta 3% ITM, con el delta que más responde y luego el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato) · el 1H manda: si cambia de dirección se sale ·
+        nunca contratos fuera del dinero: solo en el dinero hasta 3% ITM, con el delta que más responde y luego el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato o el ${esc(S.settings?.spread_premium_pct ?? 2)}% de la prima en las caras) · el 1H manda: si cambia de dirección se sale ·
         el día del vencimiento se cierra a las 15:30.
       </div>
       <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía (11:00–14:00 NY, sin entradas nuevas)</label></div>
@@ -1059,7 +1062,7 @@ ${isAdmin ? `
     const fd = new FormData(e.target);
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
-      "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "min_score", "partial_r",
+      "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
       "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
