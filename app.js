@@ -332,12 +332,22 @@ async function saveSettings(patch) {
 }
 
 // ---------- estadísticas ----------
-function computeStats(trades) {
+/**
+ * desde (YYYY-MM-DD, hora de Nueva York): el panel solo cuenta lo abierto a partir de ese día. Sirve
+ * para empezar una etapa de cero sin borrar nada; el historial y los agentes siguen con todo.
+ * Las posiciones que siguen abiertas se cuentan siempre, caigan antes o después del corte: son
+ * dinero vivo y están a la vista en la tabla de posiciones.
+ */
+function computeStats(todas, desde) {
+  const abiertas = todas.filter((t) => t.status === "open");
+  const trades = desde
+    ? todas.filter((t) => t.status === "open" || etDay(t.opened_at) >= desde)
+    : todas;
   const closed = trades.filter((t) => t.status === "closed");
   const wins = closed.filter((t) => +t.realized_pnl > 0);
   const td = today();
   const todays = trades.filter((t) => etDay(t.opened_at) === td);
-  const open = trades.filter((t) => t.status === "open");
+  const open = abiertas;
   const gw = wins.reduce((s, t) => s + +t.realized_pnl, 0);
   const gl = -closed.filter((t) => +t.realized_pnl <= 0).reduce((s, t) => s + +t.realized_pnl, 0);
   const byDay = {};
@@ -434,7 +444,12 @@ async function loadCalendario() {
 }
 
 function viewPanel(v) {
-  const k = computeStats(S.trades);
+  // Fecha de corte del panel: a partir de aquí se cuenta de cero. No borra nada.
+  const desde = S.settings?.panel_desde ?? null;
+  const delPanel = desde
+    ? S.trades.filter((t) => t.status === "open" || etDay(t.opened_at) >= desde)
+    : S.trades;
+  const k = computeStats(S.trades, desde);
   const days = Object.entries(k.byDay).slice(-30);
   v.insertAdjacentHTML("beforeend", `
   <section class="grid kpis">
@@ -471,7 +486,7 @@ function viewPanel(v) {
   </section>` : ""}
   <section class="card">
     <h3>Últimas operaciones</h3>
-    ${tradesTable(S.trades.slice(0, 8))}
+    ${tradesTable(delPanel.slice(0, 8))}
   </section>`);
   // Las posiciones abiertas ahora viven tambien aqui: hay que enganchar sus botones de cerrar.
   v.querySelectorAll("[data-close]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); closeTrade(+b.dataset.close); }));
@@ -483,7 +498,9 @@ function viewPanel(v) {
   Chart.defaults.borderColor = "#243040";
   Chart.defaults.font.family = "Inter";
   let acc = 0;
-  const closed = S.trades.filter((t) => t.status === "closed").sort((a, b) => a.closed_at.localeCompare(b.closed_at));
+  const corte = S.settings?.panel_desde ?? null;
+  const closed = S.trades.filter((t) => t.status === "closed" && (!corte || etDay(t.opened_at) >= corte))
+    .sort((a, b) => a.closed_at.localeCompare(b.closed_at));
   S.charts.push(new Chart($("#chEquity"), {
     type: "line",
     data: {
@@ -1112,6 +1129,7 @@ async function closeTrade(id) {
   }
 }
 
+// El historial enseña TODO, sin corte: es el expediente del bot y de él aprenden los agentes.
 function viewHistory(v) {
   const days = [...new Set(S.trades.map((t) => etDay(t.opened_at)))];
   v.insertAdjacentHTML("beforeend", `
@@ -1305,6 +1323,9 @@ ${isAdmin ? `
       ${num("fade_1m", "Salida rápida: vela de 1M en contra con volumen (× media, 0 = apagada)", s.fade_1m ?? 1.5, 0, 5, 0.1)}
       ${num("peak_giveback", "Venta en el pico: puntos de % que se puede devolver (0 = apagada)", s.peak_giveback ?? 5, 0, 50, 1)}
       ${num("event_block_min", "No abrir X minutos antes de un dato de alto impacto (0 = apagado)", s.event_block_min ?? 15, 0, 120, 5)}
+      <div><label>El panel cuenta desde (vacío = todo)</label>
+        <input type="date" name="panel_desde" value="${esc(s.panel_desde ?? "")}">
+        <small class="muted">No borra nada: el historial y los agentes siguen viéndolo todo.</small></div>
       <div><label>Días de resultados del activo</label><select name="earnings_block">
         <option value="si" ${s.earnings_block === false ? "" : "selected"}>Esperar al reporte y operar después (recomendado)</option>
         <option value="no" ${s.earnings_block === false ? "selected" : ""}>Operar igual, sin mirar los resultados</option></select></div>
@@ -1441,6 +1462,7 @@ ${isAdmin ? `
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
+    patch.panel_desde = fd.get("panel_desde") || null;
     patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
     patch.trade_style = fd.get("trade_style") === "swing" ? "swing" : "scalp";
     patch.entry_mode = fd.get("entry_mode") === "immediate" ? "immediate" : "smart";
