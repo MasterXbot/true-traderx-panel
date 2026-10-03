@@ -757,6 +757,13 @@ async function bindResearch() {
   await viewReports(box);
 }
 
+const ESTADO_INFORME = {
+  pendiente: "⏳ Esperando tu decisión",
+  aplicado: "✅ Aplicado",
+  descartado: "✖ Descartado",
+  caducado: "🕗 Caducado (simulador viejo)",
+};
+
 async function viewReports(box) {
   const { data } = await sb.from("research_reports").select("*").order("created_at", { ascending: false }).limit(7);
   if (!data?.length) return (box.innerHTML = `<div class="empty">Todavía no hay reportes. El primero sale hoy después del cierre, o pulsa "Investigar ahora".</div>`);
@@ -764,14 +771,41 @@ async function viewReports(box) {
     <div style="border-top:1px solid var(--line);padding:10px 0">
       <div class="row"><b>${esc(r.day)}</b>
         <span class="badge">${r.n_trades} trades</span>
-        <span class="badge">${r.applied ? "✅ Ajustes aplicados" : r.changes?.length ? "💡 Sugerencia" : "Sin cambios"}</span></div>
+        <span class="badge">${ESTADO_INFORME[r.estado ?? (r.applied ? "aplicado" : "pendiente")] ?? esc(r.estado)}</span></div>
       <div class="stats" style="margin:6px 0">
         <div><small>Real</small><b class="${cls(r.actual_pnl)}">${usd(r.actual_pnl)}</b></div>
         <div><small>Simulado (ajustes previos)</small><b class="${cls(r.sim_before)}">${usd(r.sim_before)}</b></div>
         <div><small>Simulado (ajustes nuevos)</small><b class="${cls(r.sim_after)}">${usd(r.sim_after)}</b></div></div>
       ${(r.changes ?? []).map((c) => `<div class="alert info" style="margin:4px 0">⚙️ ${esc(c)}</div>`).join("")}
+      ${(r.estado ?? (r.applied ? "aplicado" : "pendiente")) === "pendiente" && (r.changes ?? []).length
+        ? `<div class="row" style="margin-top:8px;gap:8px">
+            <button class="btn primary sm" data-aprobar="${r.id}">✔ Aprobar y aplicar</button>
+            <button class="btn sm" data-descartar="${r.id}">✖ Descartar</button>
+            <span class="muted sm">Nada cambia hasta que pulses uno de los dos.</span>
+          </div>`
+        : ""}
       ${k === 0 ? (r.findings?.notes ?? []).map((n) => `<div class="muted">• ${esc(n)}</div>`).join("") : ""}
     </div>`).join("");
+
+  // Decidir sobre una propuesta: aplicar escribe los ajustes, descartar solo deja constancia.
+  const decidir = async (b, accion, texto) => {
+    const cambios = b.closest("div").parentElement.querySelectorAll(".alert.info");
+    const lista = [...cambios].map((x) => x.textContent.trim()).join("\n");
+    if (accion === "research_apply" && !confirm(`Vas a aplicar estos ajustes al bot:\n\n${lista}\n\n¿Seguro?`)) return;
+    b.disabled = true;
+    b.textContent = texto;
+    try {
+      await action({ action: accion, id: +b.dataset.aprobar || +b.dataset.descartar });
+      toast(accion === "research_apply" ? "Ajustes aplicados" : "Propuesta descartada");
+      await loadAll();
+      await viewReports(box);
+    } catch (err) {
+      toast("Error: " + err.message, 6000);
+      b.disabled = false;
+    }
+  };
+  box.querySelectorAll("[data-aprobar]").forEach((b) => (b.onclick = () => decidir(b, "research_apply", "Aplicando…")));
+  box.querySelectorAll("[data-descartar]").forEach((b) => (b.onclick = () => decidir(b, "research_dismiss", "Descartando…")));
 }
 
 function timeline(events) {
@@ -931,6 +965,34 @@ function viewSignals(v) {
   </div>`);
 }
 
+const VALORES_MEDIDOS = {
+  // Salidas
+  atr_trail: 1,           // escáner, 146 ops: +9.50% sin él → +13.09% (factor 1.80 → 2.10)
+  alert_atr_trail: 2,     // alertas, 103 ops: ×1 da +6.255% y ×2 da +8.105% (el ×1 del escáner aquí resta)
+  stop_velas: 0,          // medido peor que el stop de precio: 1 vela +14.48%, 2 velas +15.45%, contra +17.04%
+  time_stop_min: 25,
+  alert_time_stop_min: 10,
+  lock_start_pct: 8,      // sigue aportando con el trail puesto (7.79 contra 6.76 sin él)
+  lock_keep: 0.5,
+  min_profit_pct: 8,
+  stop_mult: 1,
+  // Entradas
+  lateral_pct: 0.2,       // escáner: 132 de 146 entradas, factor 2.17, total igual. Al 0.4 ya cuesta dinero
+  entry_retest_min: 3,    // a mercado +0.386% · 2min +1.627% · 3min +1.463% · 5min +1.306% · 7min +1.218%
+  entry_wait_min: 20,     // 20 min +1.463% contra 60 min +1.107%
+  entry_pullback_atr: 0.3, // el 0.1 dejaba stops de 4 céntimos que en real se barren
+  entry_volume_min: 1.2,
+  entry_vol_min: 1,
+  // Horario: el día abierto, que el filtro lo hace el estado del activo
+  alert_open_min: 570,
+  scan_open_min: 570,
+  scan_second_min: 570,
+  entry_last_min: 935,
+  // Contratos
+  dte_min: 2,             // el 1 DTE se probó: 5 operaciones, 0% de acierto
+  dte_max: 5,
+};
+
 function viewConfig(v) {
   const isAdmin = S.profile?.role === "admin";
   const s = S.settings ?? {};
@@ -1026,6 +1088,11 @@ ${isAdmin ? `
       ${num("lock_start_pct", "Candado de ganancia desde +% de la opción (0 = apagado)", s.lock_start_pct ?? 8, 0, 100, 1)}
       ${num("lock_keep", "Parte del máximo que asegura el candado (0.5 = la mitad)", s.lock_keep ?? 0.5, 0.2, 0.9, 0.05)}
       ${num("candle_trail", "Stop vela por vela desde × el candado (3 = +24%; 0 = nunca)", s.candle_trail ?? 3, 0, 10, 0.5)}
+      ${num("atr_trail", "Take profit ATR: el stop persigue al máximo a × ATR de 5M (0 = apagado)", s.atr_trail ?? 1, 0, 5, 0.25)}
+      ${num("alert_atr_trail", "Take profit ATR de las ALERTAS (más ancho: la alerta respira más)", s.alert_atr_trail ?? 2, 0, 5, 0.25)}
+      ${num("stop_velas", "Stop por estructura: velas de 5M en contra que cierran (0 = apagado, medido peor)", s.stop_velas ?? 0, 0, 5, 1)}
+      ${num("lateral_pct", "No operar si el activo está lateral: percentil de anchura de bandas 15M (0 = apagado)", s.lateral_pct ?? 0.2, 0, 1, 0.05)}
+      ${num("entry_retest_min", "Entrada: minutos esperando el retest del nivel (0 = comprar a mercado)", s.entry_retest_min ?? 3, 0, 30, 1)}
       ${num("ema_stop_1m", "Invalidación por EMA de 1M: minutos de aire (0 = apagada)", s.ema_stop_1m ?? 5, 0, 60, 1)}
       ${num("ema_stop_atr", "Margen de ruptura de la EMA de 1M (ATR)", s.ema_stop_atr ?? 0.15, 0, 2, 0.05)}
       ${num("ema_stop_peak_r", "La invalidación solo aplica hasta +R de avance", s.ema_stop_peak_r ?? 0.35, 0, 2, 0.05)}
@@ -1090,7 +1157,11 @@ ${isAdmin ? `
       <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
         ${Object.entries(SETUPS).map(([k, n]) => `<label class="check"><input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}> ${n}</label>`).join("")}
       </div></div>
-      <div style="grid-column:1/-1"><button class="btn primary">Guardar</button></div>
+      <div style="grid-column:1/-1" class="row">
+        <button class="btn primary">Guardar</button>
+        <button type="button" class="btn" id="resetMedidos" title="Devuelve cada ajuste al valor que gano en las mediciones con datos reales. No guarda: los marca para que los revises.">↩︎ Valores medidos</button>
+        <span class="muted sm">Devuelve los ajustes al valor que gano midiendo con datos reales. Marca en naranja los que cambia y no guarda nada hasta que pulses Guardar.</span>
+      </div>
     </form>
   </section>
 
@@ -1139,13 +1210,35 @@ ${isAdmin ? `
     try { await action({ action: "delete_keys" }); await loadAll(); render(); } catch (err) { toast(err.message); }
   });
 
+  const btnMedidos = $("#resetMedidos");
+  if (btnMedidos) btnMedidos.onclick = () => {
+    const f = $("#riskForm");
+    let cambiados = 0;
+    for (const [k, valor] of Object.entries(VALORES_MEDIDOS)) {
+      const campo = f.elements[k];
+      if (!campo) continue;
+      if (Number(campo.value) !== valor) {
+        campo.value = valor;
+        campo.style.outline = "2px solid var(--warn, #f59e0b)";
+        cambiados++;
+      }
+    }
+    toast(
+      cambiados
+        ? `${cambiados} ajuste(s) devueltos a su valor medido (marcados en naranja). Revisa y pulsa Guardar.`
+        : "Ya estaban todos en su valor medido.",
+      9000,
+    );
+  };
+
   if (isAdmin) $("#riskForm").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min", "alert_time_stop_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min", "alert_time_stop_min",
+      "atr_trail", "alert_atr_trail", "stop_velas", "lateral_pct", "entry_retest_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
