@@ -328,6 +328,10 @@ function computeStats(trades) {
     d.pnl += +t.realized_pnl + (t.status === "open" ? +(t.unrealized_pnl ?? 0) : 0);
     if (t.status === "closed" && +t.realized_pnl > 0) d.wins++;
   }
+  // Dinero realmente puesto y dinero que vale ahora lo que hay abierto: una opcion cotiza por accion,
+  // asi que el desembolso es prima x 100 x contratos. Es como lo enseña cualquier broker.
+  const coste = open.reduce((a, t) => a + +t.entry_price * 100 * +t.qty_open, 0);
+  const valor = open.reduce((a, t) => a + +(t.last_option_bid ?? 0) * 100 * +t.qty_open, 0);
   const cerradasHoy = todays.filter((t) => t.status === "closed");
   const ganadasHoy = cerradasHoy.filter((t) => +t.realized_pnl > 0).length;
   return {
@@ -339,6 +343,11 @@ function computeStats(trades) {
     today: todays.reduce((s, t) => s + +t.realized_pnl + (t.status === "open" ? +(t.unrealized_pnl ?? 0) : 0), 0),
     tradesToday: todays.length,
     winRate: closed.length ? (wins.length / closed.length) * 100 : null,
+    ganadas: wins.length,
+    perdidas: closed.length - wins.length,
+    cerradasHoy: cerradasHoy.length,
+    coste,
+    valor,
     closed: closed.length,
     open: open.length,
     unreal: open.reduce((s, t) => s + +(t.unrealized_pnl ?? 0), 0),
@@ -410,15 +419,27 @@ function viewPanel(v) {
   const days = Object.entries(k.byDay).slice(-30);
   v.insertAdjacentHTML("beforeend", `
   <section class="grid kpis">
-    ${kpi("P&L hoy", usd(k.today), `${k.tradesToday} trades hoy`, cls(k.today))}
-    ${kpi("P&L total", usd(k.total), `${k.closed} trades cerrados`, cls(k.total))}
+    ${kpi("P&L hoy", usd(k.today), `${k.tradesToday} operaciones hoy`, cls(k.today))}
+    ${kpi("P&L total", usd(k.total), `${k.closed} operaciones cerradas`, cls(k.total))}
     ${kpi(
-      "Récord de hoy",
-      `<span class="rec-w">${k.ganadasHoy}G</span> · <span class="rec-l">${k.perdidasHoy}P</span>${k.abiertasHoy ? ` · <span class="muted">${k.abiertasHoy} abierta${k.abiertasHoy > 1 ? "s" : ""}</span>` : ""}`,
-      k.winRateHoy == null ? "Sin cerradas hoy" : `${k.winRateHoy.toFixed(0)}% hoy · ${k.winRate.toFixed(0)}% histórico · factor ${k.pf ? k.pf.toFixed(2) : "—"}`,
+      "Acierto hoy",
+      k.winRateHoy == null ? "—" : `${k.winRateHoy.toFixed(0)}%`,
+      k.cerradasHoy
+        ? `<span class="rec-w">${k.ganadasHoy}G</span> · <span class="rec-l">${k.perdidasHoy}P</span>${k.abiertasHoy ? ` · ${k.abiertasHoy} abierta${k.abiertasHoy > 1 ? "s" : ""}` : ""}`
+        : k.abiertasHoy ? `Sin cerrar aún · ${k.abiertasHoy} abierta${k.abiertasHoy > 1 ? "s" : ""}` : "Sin operaciones hoy",
     )}
-    ${kpi("Abiertas", k.open, `Flotante ${usd(k.unreal)}`, cls(k.unreal))}
+    ${kpi(
+      "Acierto total",
+      k.winRate == null ? "—" : `${k.winRate.toFixed(0)}%`,
+      k.closed ? `<span class="rec-w">${k.ganadas}G</span> · <span class="rec-l">${k.perdidas}P</span> · factor ${k.pf ? k.pf.toFixed(2) : "—"}` : "Sin histórico",
+    )}
+    ${kpi("Abiertas", k.open, k.open ? `Puesto ${usd(k.coste)} · vale ${usd(k.valor)}` : "Nada abierto", cls(k.unreal))}
     ${kpi("Ganancia media", usd(k.avgWin), `Pérdida media ${usd(k.avgLoss)}`)}
+  </section>
+  <section class="card">
+    <div class="row"><h3 style="margin:0">Posiciones abiertas (${k.open})</h3><div class="spacer"></div>
+      ${k.open ? `<span class="num ${cls(k.unreal)}" style="font-weight:700">${usd(k.unreal)} flotante</span>` : ""}</div>
+    ${posicionesTabla(S.trades.filter((t) => t.status === "open"))}
   </section>
   <section class="grid cols-2">
     <div class="card"><h3>P&L acumulado</h3><div class="chart-box"><canvas id="chEquity"></canvas></div></div>
@@ -433,6 +454,9 @@ function viewPanel(v) {
     <h3>Últimas operaciones</h3>
     ${tradesTable(S.trades.slice(0, 8))}
   </section>`);
+  // Las posiciones abiertas ahora viven tambien aqui: hay que enganchar sus botones de cerrar.
+  v.querySelectorAll("[data-close]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); closeTrade(+b.dataset.close); }));
+  bindTradeRows(v);
   loadCalendario();
 
   if (!window.Chart) return;
@@ -468,11 +492,66 @@ function viewPanel(v) {
   }));
 }
 
+function posicionesTabla(open) {
+  if (!open.length) {
+    return `<div class="empty">No hay posiciones abiertas. El vigilante revisa cada 15 segundos cuando las hay.</div>`;
+  }
+  const fila = (t) => {
+    const d = t.direction === "CALL" ? 1 : -1;
+    const R = Math.abs(t.entry_underlying - t.init_stop_underlying) || 1;
+    const prog = t.last_underlying ? (d * (t.last_underlying - t.entry_underlying)) / R : 0;
+    const pnl = +(t.unrealized_pnl ?? 0) + +t.realized_pnl;
+    const bid = +(t.last_option_bid ?? 0);
+    const coste = +t.entry_price * 100 * +t.qty_open;
+    const valor = bid * 100 * +t.qty_open;
+    const puesto = +t.entry_price * 100 * +t.qty;
+    return `<tr class="clickable" data-trade="${t.id}">
+      <td><b>${esc(t.symbol)}</b> <span class="badge ${d > 0 ? "call" : "put"}">${t.direction}</span></td>
+      <td class="mono">${t.strike} · ${esc(t.expiry)}</td>
+      <td class="num">${t.qty_open}/${t.qty}</td>
+      <td class="num">${usd(t.entry_price)}</td>
+      <td class="num">${bid ? usd(bid) : "—"}</td>
+      <td class="num muted">${usd(coste)}</td>
+      <td class="num">${bid ? usd(valor) : "—"}</td>
+      <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
+      <td class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
+      <td class="num">${(+t.last_underlying || 0).toFixed(2)}</td>
+      <td class="num">${(+t.stop_underlying).toFixed(2)}</td>
+      <td class="num ${cls(prog)}">${prog.toFixed(2)}R</td>
+      <td><button class="btn danger sm" data-close="${t.id}" title="Vende todos los contratos de esta posición ahora mismo">Cerrar</button></td>
+    </tr>`;
+  };
+  const coste = open.reduce((a, t) => a + +t.entry_price * 100 * +t.qty_open, 0);
+  const valor = open.reduce((a, t) => a + +(t.last_option_bid ?? 0) * 100 * +t.qty_open, 0);
+  const pnl = open.reduce((a, t) => a + +(t.unrealized_pnl ?? 0) + +t.realized_pnl, 0);
+  const puesto = open.reduce((a, t) => a + +t.entry_price * 100 * +t.qty, 0);
+  return `<div class="table-wrap"><table class="broker">
+    <thead><tr><th>Activo</th><th>Contrato</th><th class="num">Cant.</th>
+      <th class="num">Compra</th><th class="num">Venta ahora</th><th class="num">Coste</th><th class="num">Valor</th>
+      <th class="num">P&L</th><th class="num">P&L %</th><th class="num">Subyacente</th><th class="num">Stop</th>
+      <th class="num">Progreso</th><th></th></tr></thead>
+    <tbody>${open.map(fila).join("")}</tbody>
+    <tfoot><tr>
+      <td colspan="5"><b>Total (${open.length})</b></td>
+      <td class="num">${usd(coste)}</td><td class="num">${usd(valor)}</td>
+      <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
+      <td class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
+      <td colspan="4"></td>
+    </tr></tfoot></table></div>`;
+}
+
+function pctDe(t) {
+  const puesto = +t.entry_price * 100 * +t.qty;
+  const pnl = +t.realized_pnl + (t.status === "open" ? +(t.unrealized_pnl ?? 0) : 0);
+  if (!puesto) return "—";
+  return ((pnl / puesto) * 100).toFixed(1) + "%";
+}
+
 function tradesTable(rows) {
   if (!rows.length) return `<div class="empty">Aún no hay operaciones</div>`;
   return `<div class="table-wrap"><table>
     <thead><tr><th>Fecha</th><th>Activo</th><th>Tipo</th><th>Setup</th><th>Contrato</th><th class="num">Cant.</th>
-    <th class="num">Entrada</th><th class="num">Salida</th><th class="num">P&L</th><th>Estado / motivo</th></tr></thead>
+    <th class="num">Compra</th><th class="num">Venta</th><th class="num">P&L</th><th class="num">P&L %</th><th>Estado / motivo</th></tr></thead>
     <tbody>${rows.map((t) => {
       const pnl = t.status === "open" ? +(t.unrealized_pnl ?? 0) + +t.realized_pnl : +t.realized_pnl;
       return `<tr class="clickable" data-trade="${t.id}">
@@ -484,7 +563,8 @@ function tradesTable(rows) {
         <td class="num">${t.status === "open" ? `${t.qty_open}/${t.qty}` : t.qty}</td>
         <td class="num">${usd(t.entry_price)}</td>
         <td class="num">${t.exit_price ? usd(t.exit_price) : "—"}</td>
-        <td class="num ${cls(pnl)}">${usd(pnl)}</td>
+        <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
+        <td class="num ${cls(pnl)}">${pctDe(t)}</td>
         <td>${t.status === "open" ? `<span class="badge">ABIERTA</span>` : esc(t.exit_reason ?? "")}</td>
       </tr>`;
     }).join("")}</tbody></table></div>`;
@@ -497,7 +577,7 @@ function bindTradeRows(v) {
     if (next?.classList.contains("detail")) return next.remove();
     if (!S.events[id]) await loadEvents([id]);
     const t = S.trades.find((x) => x.id === id) ?? {};
-    tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="10">${tradeFacts(t)}${timeline(S.events[id] ?? [])}</td></tr>`);
+    tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="${tr.cells.length}">${tradeFacts(t)}${timeline(S.events[id] ?? [])}</td></tr>`);
   }));
 }
 

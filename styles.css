@@ -164,3 +164,11 @@ tr.clickable:hover td { background: var(--panel-2); }
 /* Récord diario */
 .rec-w { color: var(--green); }
 .rec-l { color: var(--red); }
+
+/* ---------- tabla de posiciones estilo broker ---------- */
+/* Lo importante se lee de un vistazo: el precio al que se compró, lo que vale ahora y el resultado. */
+table.broker td, table.broker th { padding: 9px 12px; }
+table.broker tbody td { font-variant-numeric: tabular-nums; }
+table.broker tfoot td { border-top: 2px solid var(--line); border-bottom: none; padding-top: 12px; }
+table.broker tfoot { background: var(--panel-2); }
+table.broker .badge { margin-left: 6px; }
