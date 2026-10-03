@@ -12,6 +12,7 @@ const SETUPS = {
   momentum: "Momentum",
   rompimiento_ema20: "Rompimiento EMA20",
   tradingview: "Alerta de TradingView",
+  descubierta: "Descubierta por el bot",
 };
 
 const S = { user: null, profile: null, settings: null, trades: [], events: {}, signals: [], watch: [], tab: "panel", charts: [] };
@@ -658,6 +659,15 @@ async function viewIntelligence(v) {
     <div id="aiStats" class="muted">Cargando…</div>
   </section>
   <section class="card">
+    <div class="row"><h2 style="margin:0">🧪 Estrategias que encontró el bot</h2><div class="spacer"></div></div>
+    <p class="muted">Los cinco setups del bot los escribimos a mano. Esto son entradas que encontró él solo, combinando
+    los indicadores que ya calcula. Para llegar aquí una idea tiene que ganar en la primera mitad del periodo <b>y</b> en la
+    segunda, tener factor de beneficio ≥ 1.30, y volver a ganar en activos que <b>no</b> se usaron para encontrarla.
+    Esto último es lo que más descarta: en la primera tanda, dos reglas que parecían excelentes (+16R, factor 2.26) dieron
+    −8R en activos nuevos. <b>Ninguna opera hasta que la apruebes.</b></p>
+    <div id="aiEstrategias" class="muted">Cargando…</div>
+  </section>
+  <section class="card">
     <div class="row"><h2 style="margin:0">🔬 Agente investigador</h2><div class="spacer"></div>
       <button class="btn sm" id="researchNow">Investigar ahora</button></div>
     <p class="muted">Cada tarde (después del cierre) revive tus trades de los últimos 30 días vela a vela con las velas reales de 5M/15M/1H
@@ -676,6 +686,7 @@ async function viewIntelligence(v) {
     <div id="aiPatterns" class="muted">Cargando…</div>
   </section>
   <section class="card"><h2>Lecciones recientes del analista</h2><div id="aiLessons"></div></section>`);
+  bindEstrategias();
   bindResearch();
   bindPatterns();
   const lessons = S.trades.filter((t) => t.lesson).slice(0, 15);
@@ -736,6 +747,69 @@ async function bindPaper() {
       : `Efectivo <b>${usd(r.cash)}</b> · Capital <b>${usd(r.equity ?? r.cash)}</b> · Inicial ${usd(r.start)} · ` +
         `<span class="${cls((r.equity ?? r.cash) - r.start)}">${usd((r.equity ?? r.cash) - r.start)}</span>`;
   } catch { box.textContent = "—"; }
+}
+
+const ESTADO_ESTRATEGIA = {
+  pendiente: "⏳ Esperando tu decisión",
+  activa: "🟢 Operando",
+  descartada: "✖ Descartada",
+  retirada: "⏸ Retirada",
+};
+
+async function bindEstrategias() {
+  const box = $("#aiEstrategias");
+  if (!box) return;
+  if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  const { data } = await sb.from("estrategias_descubiertas").select("*").order("creada_en", { ascending: false }).limit(20);
+  if (!data?.length) {
+    box.innerHTML = `<div class="empty">Todavía no ha encontrado ninguna que supere los tres filtros.</div>`;
+    return;
+  }
+  box.innerHTML = data.map((e) => {
+    const m = e.metricas ?? {};
+    const v = m.validacion ?? null;
+    const cond = (e.conds ?? []).map((c) => `<code>${esc(c.rasgo)} ${esc(c.op)} ${c.valor}</code>`).join(" y ");
+    return `<div style="border-top:1px solid var(--line);padding:12px 0">
+      <div class="row"><span class="badge ${e.dir === 'CALL' ? 'call' : 'put'}">${esc(e.dir)}</span>
+        <b>Estrategia #${e.id}</b>
+        <span class="badge">${ESTADO_ESTRATEGIA[e.estado] ?? esc(e.estado)}</span>
+        <div class="spacer"></div><span class="muted sm">${etDay(e.creada_en)}</span></div>
+      <div style="margin:8px 0">Entra cuando ${cond}</div>
+      <div class="stats">
+        <div><small>Donde se buscó</small><b>${m.n ?? "—"} ops · ${m.acierto ?? "—"}% · factor ${m.factor ?? "—"}</b></div>
+        <div><small>1ª mitad / 2ª mitad</small><b>${m.r_1a_mitad ?? "—"}R / ${m.r_2a_mitad ?? "—"}R</b></div>
+        <div><small>En activos NUEVOS</small><b class="${v && v.factor >= 1.2 ? 'pos' : 'neg'}">${v ? `${v.n} ops · factor ${v.factor} · ${v.r_total}R` : "sin validar"}</b></div>
+      </div>
+      ${e.estado === 'pendiente'
+        ? `<div class="row" style="margin-top:10px;gap:8px">
+            <button class="btn primary sm" data-estrat-si="${e.id}">✔ Aprobar y poner a operar</button>
+            <button class="btn sm" data-estrat-no="${e.id}">✖ Descartar</button>
+            <span class="muted sm">Hasta que pulses, no opera nada.</span></div>`
+        : e.estado === 'activa'
+        ? `<div class="row" style="margin-top:10px"><button class="btn danger sm" data-estrat-off="${e.id}">⏸ Retirar</button>
+            <span class="muted sm">Lleva ${e.ops_reales ?? 0} operaciones reales (${usd(e.pnl_real ?? 0)}).</span></div>`
+        : ""}
+    </div>`;
+  }).join("");
+
+  const decidir = async (b, accion, id, pregunta) => {
+    if (pregunta && !confirm(pregunta)) return;
+    b.disabled = true;
+    b.textContent = "…";
+    try {
+      await action({ action: accion, id });
+      toast("Hecho");
+      await bindEstrategias();
+    } catch (err) {
+      toast("Error: " + err.message, 6000);
+      b.disabled = false;
+    }
+  };
+  box.querySelectorAll("[data-estrat-si]").forEach((b) => (b.onclick = () => decidir(b, "estrategia_activar", +b.dataset.estratSi,
+    "Vas a poner esta estrategia a operar de verdad. El bot abrirá posiciones con ella cuando se cumplan sus condiciones. ¿Seguro?")));
+  box.querySelectorAll("[data-estrat-no]").forEach((b) => (b.onclick = () => decidir(b, "estrategia_descartar", +b.dataset.estratNo, null)));
+  box.querySelectorAll("[data-estrat-off]").forEach((b) => (b.onclick = () => decidir(b, "estrategia_retirar", +b.dataset.estratOff,
+    "Esta estrategia dejará de abrir posiciones nuevas. Las que tenga abiertas las sigue gestionando el vigilante. ¿Seguro?")));
 }
 
 async function bindResearch() {
