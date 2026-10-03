@@ -272,7 +272,10 @@ function render() {
   // Usuarios (no admin): solo lo básico. La estrategia y la configuración son del administrador.
   const tabs = isAdmin
     ? [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["sig", "Señales"], ["ai", "Inteligencia"], ["cfg", "Configuración"], ["admin", "Admin"]]
-    : [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["cfg", "Mi broker"]];
+    // El usuario tiene tres sitios y ninguno cuenta cómo trabaja el bot: su panel, sus posiciones
+    // abiertas y la pantalla para conectar su broker. El historial completo queda fuera porque un
+    // listado de entradas con su hora y su activo, puesto al lado de un gráfico, es la estrategia.
+    : [["panel", "Panel"], ["pos", "Posiciones"], ["cfg", "Mi broker"]];
   if (!tabs.some(([k]) => k === S.tab)) S.tab = "panel";
 
   $("#app").innerHTML = `
@@ -461,11 +464,11 @@ function viewPanel(v) {
     <div class="card"><h3>P&L acumulado</h3><div class="chart-box"><canvas id="chEquity"></canvas></div></div>
     <div class="card"><h3>Trades y P&L por día</h3><div class="chart-box"><canvas id="chDays"></canvas></div></div>
   </section>
-  <section class="card cal-card">
+  ${esAdmin() ? `  <section class="card cal-card">
     <div class="row"><h3 style="margin:0">Calendario</h3><div class="spacer"></div>
       <span class="muted sm" id="calMeta"></span></div>
     <div id="calendario" class="muted sm">Cargando…</div>
-  </section>
+  </section>` : ""}
   <section class="card">
     <h3>Últimas operaciones</h3>
     ${tradesTable(S.trades.slice(0, 8))}
@@ -473,7 +476,7 @@ function viewPanel(v) {
   // Las posiciones abiertas ahora viven tambien aqui: hay que enganchar sus botones de cerrar.
   v.querySelectorAll("[data-close]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); closeTrade(+b.dataset.close); }));
   bindTradeRows(v);
-  loadCalendario();
+  if (esAdmin()) loadCalendario();
 
   if (!window.Chart) return;
   Chart.defaults.color = "#8b98a8";
@@ -1235,6 +1238,7 @@ ${isAdmin ? `
   </section>
 ` : ""}
 
+  ${isAdmin ? `
   <section class="card">
     <h2>🧪 Paper con precios reales</h2>
     <p class="muted">El <b>paper interno</b> simula tu cuenta dentro del bot: cada compra a mercado se llena al <b>ask real</b> y cada venta
@@ -1254,7 +1258,7 @@ ${isAdmin ? `
       ${isAdmin ? `<div><label>Reiniciar con capital (US$)</label><div class="row"><input id="paperCash" type="number" min="1000" step="1000" value="100000" style="max-width:160px">
         <button type="button" class="btn sm danger" id="paperReset">Reiniciar paper</button></div></div>` : ""}
     </div>
-  </section>
+  </section>` : ""}
 
 ${isAdmin ? `
   <section class="card">
@@ -1369,8 +1373,7 @@ ${isAdmin ? `
         <a href="#" data-wdel="${w.id}" class="muted" style="margin-left:6px;text-decoration:none" title="Quitar">×</a>
       </span>`).join("") || `<span class="muted">Lista vacía</span>`}</div>
   </section>` : `
-  <section class="card"><h2>⚙️ Estrategia y riesgo</h2>
-    <p class="muted">La estrategia, los stops, el tamaño de las posiciones y los activos los gestiona el <b>administrador</b> y se aplican a tu cuenta automáticamente. Tú solo necesitas tu broker conectado y el bot encendido.</p></section>`}`);
+  `}`);
 
   const syncBroker = () => {
     const b = $("#brokerSel").value;
