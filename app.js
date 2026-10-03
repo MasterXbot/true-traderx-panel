@@ -107,13 +107,22 @@ async function loadAll() {
   const uid = S.user.id;
   const [p, s, t, w, sig] = await Promise.all([
     sb.from("profiles").select("*").eq("id", uid).single(),
-    sb.from("bot_settings").select("*").eq("user_id", uid).single(),
-    sb.from("trades").select("*").eq("user_id", uid).order("opened_at", { ascending: false }).limit(1000),
+    // mi_cuenta y mis_operaciones en vez de las tablas: las vistas devuelven todo si quien pregunta
+    // es administrador, y solo lo suyo -sin estrategia, sin stops, sin motivos reales- si es un
+    // usuario. Esconderlo en la interfaz no servía: la llave pública leía las tablas directamente.
+    sb.from("mi_cuenta").select("*").eq("user_id", uid).single(),
+    sb.from("mis_operaciones").select("*").eq("user_id", uid).order("opened_at", { ascending: false }).limit(1000),
     sb.from("watchlist").select("*").eq("user_id", uid).order("symbol"),
     sb.from("signals").select("*").order("ts", { ascending: false }).limit(60),
   ]);
   S.profile = p.data;
   S.settings = s.data;
+  // Los ajustes completos solo existen para el administrador; para un usuario esta consulta no
+  // devuelve nada y su pantalla de broker se dibuja igual con lo que trae mi_cuenta.
+  if (p.data?.role === "admin") {
+    const { data: full } = await sb.from("bot_settings").select("*").eq("user_id", uid).single();
+    if (full) S.settings = { ...s.data, ...full };
+  }
   S.trades = t.data ?? [];
   S.watch = w.data ?? [];
   S.signals = sig.data ?? [];
@@ -130,6 +139,12 @@ async function loadEvents(ids) {
 
 let channel;
 function subscribe() {
+  // Los avisos en vivo de Postgres solo llegan a quien puede leer la tabla, y un usuario ya no puede.
+  // Para él, un refresco cada 30 segundos hace el mismo trabajo sin enseñarle nada.
+  if (S.profile?.role !== "admin") {
+    clearInterval(window.__ttxRefresco);
+    window.__ttxRefresco = setInterval(() => loadAll().then(render), 30000);
+  }
   if (channel) sb.removeChannel(channel);
   let pending;
   const refresh = () => {
@@ -516,9 +531,7 @@ function posicionesTabla(open) {
       <td class="num">${bid ? usd(valor) : "—"}</td>
       <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
       <td class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
-      <td class="num">${(+t.last_underlying || 0).toFixed(2)}</td>
-      <td class="num">${(+t.stop_underlying).toFixed(2)}</td>
-      <td class="num ${cls(prog)}">${prog.toFixed(2)}R</td>
+      ${esAdmin() ? `<td class="num">${(+t.last_underlying || 0).toFixed(2)}</td><td class="num">${(+t.stop_underlying || 0).toFixed(2)}</td><td class="num ${cls(prog)}">${prog.toFixed(2)}R</td>` : ""}
       <td><button class="btn danger sm" data-close="${t.id}" title="Vende todos los contratos de esta posición ahora mismo">Cerrar</button></td>
     </tr>`;
   };
@@ -529,15 +542,15 @@ function posicionesTabla(open) {
   return `<div class="table-wrap"><table class="broker">
     <thead><tr><th>Activo</th><th>Contrato</th><th class="num">Cant.</th>
       <th class="num">Compra</th><th class="num">Venta ahora</th><th class="num">Coste</th><th class="num">Valor</th>
-      <th class="num">P&L</th><th class="num">P&L %</th><th class="num">Subyacente</th><th class="num">Stop</th>
-      <th class="num">Progreso</th><th></th></tr></thead>
+      <th class="num">P&L</th><th class="num">P&L %</th>
+      ${esAdmin() ? '<th class="num">Subyacente</th><th class="num">Stop</th><th class="num">Progreso</th>' : ""}<th></th></tr></thead>
     <tbody>${open.map(fila).join("")}</tbody>
     <tfoot><tr>
       <td colspan="5"><b>Total (${open.length})</b></td>
       <td class="num">${usd(coste)}</td><td class="num">${usd(valor)}</td>
       <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
       <td class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
-      <td colspan="4"></td>
+      ${esAdmin() ? '<td colspan="4"></td>' : '<td></td>'}
     </tr></tfoot></table></div>`;
 }
 
@@ -548,10 +561,13 @@ function pctDe(t) {
   return ((pnl / puesto) * 100).toFixed(1) + "%";
 }
 
+/** Solo el administrador ve CÓMO opera el bot. Un usuario ve su dinero. */
+const esAdmin = () => S.profile?.role === "admin";
+
 function tradesTable(rows) {
   if (!rows.length) return `<div class="empty">Aún no hay operaciones</div>`;
   return `<div class="table-wrap"><table>
-    <thead><tr><th>Fecha</th><th>Activo</th><th>Tipo</th><th>Setup</th><th>Contrato</th><th class="num">Cant.</th>
+    <thead><tr><th>Fecha</th><th>Activo</th><th>Tipo</th>${esAdmin() ? "<th>Setup</th>" : ""}<th>Contrato</th><th class="num">Cant.</th>
     <th class="num">Compra</th><th class="num">Venta</th><th class="num">P&L</th><th class="num">P&L %</th><th>Estado / motivo</th></tr></thead>
     <tbody>${rows.map((t) => {
       const pnl = t.status === "open" ? +(t.unrealized_pnl ?? 0) + +t.realized_pnl : +t.realized_pnl;
@@ -559,7 +575,7 @@ function tradesTable(rows) {
         <td>${etDay(t.opened_at)} <span class="muted">${etTime(t.opened_at)}</span></td>
         <td><b>${esc(t.symbol)}</b></td>
         <td><span class="badge ${t.direction === "CALL" ? "call" : "put"}">${t.direction}</span></td>
-        <td>${esc(SETUPS[t.setup] ?? t.setup)}</td>
+        ${esAdmin() ? `<td>${esc(SETUPS[t.setup] ?? t.setup)}</td>` : ""}
         <td class="mono">${t.strike} · ${esc(t.expiry)}</td>
         <td class="num">${t.status === "open" ? `${t.qty_open}/${t.qty}` : t.qty}</td>
         <td class="num">${usd(t.entry_price)}</td>
@@ -572,6 +588,12 @@ function tradesTable(rows) {
 }
 
 function bindTradeRows(v) {
+  // El detalle de una operación es el razonamiento del vigilante movimiento a movimiento: la receta
+  // entera. No se despliega para un usuario.
+  if (!esAdmin()) {
+    v.querySelectorAll("[data-trade]").forEach((tr) => tr.classList.remove("clickable"));
+    return;
+  }
   v.querySelectorAll("[data-trade]").forEach((tr) => (tr.onclick = async () => {
     const id = +tr.dataset.trade;
     const next = tr.nextElementSibling;
@@ -981,9 +1003,9 @@ function viewPositions(v) {
     ${open.length ? `<button class="btn danger" id="closeAll">🛑 Cerrar todo</button>` : ""}
   </div>
   ${open.length ? `<div class="grid cols-2">${open.map(posCard).join("")}</div>` : `<div class="card empty">No hay posiciones abiertas. El vigilante revisa cada 15 segundos cuando hay trades.</div>`}
-  <section class="card" style="margin-top:16px"><h2>⏳ Entradas en espera (agente de entrada)</h2>
+  ${esAdmin() ? `<section class="card" style="margin-top:16px"><h2>⏳ Entradas en espera (agente de entrada)</h2>
     <p class="muted">Alertas que llegaron en pullback o sin fuerza: el agente las vigila en velas de 1M y entra cuando el precio retoma la dirección. Se cancelan solas si el pullback rompe la estructura o vence el tiempo.</p>
-    <div id="pending" class="muted">Cargando…</div></section>`);
+    <div id="pending" class="muted">Cargando…</div></section>` : ""}`);
   loadPending();
   v.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => closeTrade(+b.dataset.close)));
   const ca = $("#closeAll");
@@ -1004,6 +1026,9 @@ function viewPositions(v) {
 }
 
 function posCard(t) {
+  // Para un usuario, la tarjeta cuenta su posición y su dinero. El stop, el progreso en R, el
+  // agotamiento, las etapas de gestión y la bitácora del vigilante son la forma de trabajar del bot.
+  if (!esAdmin()) return posCardSimple(t);
   const d = t.direction === "CALL" ? 1 : -1;
   const R = Math.abs(t.entry_underlying - t.init_stop_underlying) || 1;
   const prog = t.last_underlying ? (d * (t.last_underlying - t.entry_underlying)) / R : 0;
@@ -1040,6 +1065,31 @@ function posCard(t) {
     <h3 style="margin-top:4px">Vigilante</h3>
     ${timeline(S.events[t.id] ?? [])}
     <div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn danger sm" data-close="${t.id}">Cerrar posición</button></div>
+  </div>`;
+}
+
+/** La misma posición, contada sin enseñar cómo la gestiona el bot. */
+function posCardSimple(t) {
+  const d = t.direction === "CALL" ? 1 : -1;
+  const pnl = +(t.unrealized_pnl ?? 0) + +t.realized_pnl;
+  const puesto = +t.entry_price * 100 * +t.qty;
+  const bid = +(t.last_option_bid ?? 0);
+  return `<div class="card pos-card">
+    <div class="head">
+      <span class="sym">${esc(t.symbol)}</span>
+      <span class="badge ${d > 0 ? 'call' : 'put'}">${t.direction}</span>
+      <span class="muted mono">${esc(t.option_symbol)}</span>
+      <div class="spacer"></div>
+      <span class="num ${cls(pnl)}" style="font-size:18px;font-weight:700">${usd(pnl)}</span>
+      <button class="btn danger sm" data-close="${t.id}">🛑 Cerrar ya</button>
+    </div>
+    <div class="stats">
+      <div><small>Contratos</small><b class="num">${t.qty_open}/${t.qty}</b></div>
+      <div><small>Compra → venta ahora</small><b class="num">${usd(t.entry_price)} → ${bid ? usd(bid) : "—"}</b></div>
+      <div><small>Puesto</small><b class="num">${usd(puesto)}</b></div>
+      <div><small>Resultado</small><b class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</b></div>
+    </div>
+    <div class="muted" style="font-size:12px">Vence ${esc(t.expiry)} · el bot la está gestionando y la cerrará solo.</div>
   </div>`;
 }
 
