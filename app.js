@@ -965,7 +965,9 @@ function viewSignals(v) {
   </div>`);
 }
 
-const VALORES_MEDIDOS = {
+// VALORES PREDETERMINADOS del bot: a estos vuelve el boton de la pantalla de configuracion. No son
+// numeros de catalogo, cada uno gano en una medicion con datos reales y lleva la medicion al lado.
+const VALORES_PREDETERMINADOS = {
   // Salidas
   atr_trail: 1,           // escáner, 146 ops: +9.50% sin él → +13.09% (factor 1.80 → 2.10)
   alert_atr_trail: 2,     // alertas, 103 ops: ×1 da +6.255% y ×2 da +8.105% (el ×1 del escáner aquí resta)
@@ -1159,8 +1161,8 @@ ${isAdmin ? `
       </div></div>
       <div style="grid-column:1/-1" class="row">
         <button class="btn primary">Guardar</button>
-        <button type="button" class="btn" id="resetMedidos" title="Devuelve cada ajuste al valor que gano en las mediciones con datos reales. No guarda: los marca para que los revises.">↩︎ Valores medidos</button>
-        <span class="muted sm">Devuelve los ajustes al valor que gano midiendo con datos reales. Marca en naranja los que cambia y no guarda nada hasta que pulses Guardar.</span>
+        <button type="button" class="btn" id="resetPredeterminados" title="Devuelve cada ajuste a su valor predeterminado, el que gano midiendo con datos reales. No guarda: los marca para que los revises.">↩︎ Valores predeterminados</button>
+        <span class="muted sm">Devuelve los ajustes a sus valores predeterminados, los que ganaron midiendo con datos reales. Marca en naranja los que cambia y no guarda nada hasta que pulses Guardar.</span>
       </div>
     </form>
   </section>
@@ -1210,11 +1212,11 @@ ${isAdmin ? `
     try { await action({ action: "delete_keys" }); await loadAll(); render(); } catch (err) { toast(err.message); }
   });
 
-  const btnMedidos = $("#resetMedidos");
-  if (btnMedidos) btnMedidos.onclick = () => {
+  const btnPredeterminados = $("#resetPredeterminados");
+  if (btnPredeterminados) btnPredeterminados.onclick = () => {
     const f = $("#riskForm");
     let cambiados = 0;
-    for (const [k, valor] of Object.entries(VALORES_MEDIDOS)) {
+    for (const [k, valor] of Object.entries(VALORES_PREDETERMINADOS)) {
       const campo = f.elements[k];
       if (!campo) continue;
       if (Number(campo.value) !== valor) {
@@ -1225,8 +1227,8 @@ ${isAdmin ? `
     }
     toast(
       cambiados
-        ? `${cambiados} ajuste(s) devueltos a su valor medido (marcados en naranja). Revisa y pulsa Guardar.`
-        : "Ya estaban todos en su valor medido.",
+        ? `${cambiados} ajuste(s) devueltos a su valor predeterminado (marcados en naranja). Revisa y pulsa Guardar.`
+        : "Ya estaban todos en su valor predeterminado.",
       9000,
     );
   };
