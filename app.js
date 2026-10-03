@@ -658,6 +658,25 @@ async function viewIntelligence(v) {
     (necesita al menos 8 trades para opinar).</p>
     <div id="aiStats" class="muted">Cargando…</div>
   </section>
+  ${S.profile?.role === "admin" ? `
+  <section class="card">
+    <div class="row"><h2 style="margin:0">📖 Cómo opera el bot</h2><div class="spacer"></div>
+      <span class="badge">Solo administrador</span></div>
+    <p class="muted">Qué busca cada estrategia, para tenerlo a mano. Escrito desde el código que corre de verdad.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Estrategia</th><th>Cuándo</th><th>Qué busca</th><th>Dónde pone el stop</th></tr></thead>
+      <tbody>${REFERENCIA.map((r) => `<tr>
+        <td><b>${esc(r.nombre)}</b></td>
+        <td class="muted" style="white-space:normal;max-width:170px">${esc(r.cuando)}</td>
+        <td style="white-space:normal;min-width:320px">${esc(r.busca)}</td>
+        <td class="muted" style="white-space:normal;max-width:200px">${esc(r.stop)}</td>
+      </tr>`).join("")}</tbody></table></div>
+    <p class="muted" style="margin-top:12px"><b>Las salidas son las mismas para todas:</b> el stop persigue al máximo
+    alcanzado a 1 ATR de 5M (2 ATR en las alertas de TradingView), hay candado de ganancia desde +8% de la opción
+    guardando la mitad de lo máximo alcanzado, se asegura la mitad de la posición en +0,75R, y se corta por tiempo a los
+    25 minutos si no arranca (10 minutos en las alertas). Todo se cierra antes del cierre de mercado.</p>
+  </section>` : ""}
+  ${S.profile?.role === "admin" ? `
   <section class="card">
     <div class="row"><h2 style="margin:0">🧪 Estrategias que encontró el bot</h2><div class="spacer"></div></div>
     <p class="muted">Los cinco setups del bot los escribimos a mano. Esto son entradas que encontró él solo, combinando
@@ -666,7 +685,7 @@ async function viewIntelligence(v) {
     Esto último es lo que más descarta: en la primera tanda, dos reglas que parecían excelentes (+16R, factor 2.26) dieron
     −8R en activos nuevos. <b>Ninguna opera hasta que la apruebes.</b></p>
     <div id="aiEstrategias" class="muted">Cargando…</div>
-  </section>
+  </section>` : ""}
   <section class="card">
     <div class="row"><h2 style="margin:0">🔬 Agente investigador</h2><div class="spacer"></div>
       <button class="btn sm" id="researchNow">Investigar ahora</button></div>
@@ -748,6 +767,52 @@ async function bindPaper() {
         `<span class="${cls((r.equity ?? r.cash) - r.start)}">${usd((r.equity ?? r.cash) - r.start)}</span>`;
   } catch { box.textContent = "—"; }
 }
+
+/**
+ * Qué busca cada estrategia del bot, en castellano. Está escrito desde el código de
+ * _shared/strategy.ts, no de memoria: si algún detector cambia, esto hay que cambiarlo con él.
+ *
+ * PRIVADO: esto solo se pinta para el administrador. Es la lógica con la que opera el bot y no tiene
+ * por qué salir de aquí.
+ */
+const REFERENCIA = [
+  {
+    nombre: "Vela Maestra (apertura)",
+    cuando: "En los primeros minutos del día, antes que ningún otro setup.",
+    busca: "La primera vela de 15M marca intención con un cuerpo sólido, y la segunda confirma sin devolver la mitad de lo ganado.",
+    stop: "Justo al otro lado del extremo de la vela, con un colchón de 0,1 ATR.",
+  },
+  {
+    nombre: "Rompimiento EMA20",
+    cuando: "Durante toda la sesión.",
+    busca: "Una vela abre a un lado de la EMA20 y cierra al otro, dejando más de medio cuerpo cruzado. La siguiente confirma cerrando más allá, y por encima de la EMA. Si ya salió de la banda de Bollinger se descarta: eso es llegar tarde.",
+    stop: "Al otro lado de la estructura que generó la ruptura.",
+  },
+  {
+    nombre: "Rebote EMA20",
+    cuando: "Durante toda la sesión, solo con tendencia limpia.",
+    busca: "Cuatro velas seguidas respetando la EMA20 por el mismo lado; entonces una vela la besa sin cerrar al otro lado, y la siguiente confirma rompiendo su extremo.",
+    stop: "Debajo del mínimo de la vela que tocó la media.",
+  },
+  {
+    nombre: "Imán (reversión a EMA20)",
+    cuando: "Cuando el precio se estira EN CONTRA de lo que manda el gráfico de 1 hora.",
+    busca: "Un estirón fuera de la banda de Bollinger con el estocástico en extremo, y después un cambio de color sólido que vuelve a meter el precio dentro de la banda. La idea es que la EMA20 tira del precio como un imán.",
+    stop: "Al otro lado del extremo del estirón.",
+  },
+  {
+    nombre: "Momentum",
+    cuando: "Durante toda la sesión.",
+    busca: "Tres velas seguidas a favor y sólidas, con un recorrido conjunto un 20% mayor de lo normal y la última con volumen un 30% por encima de su media. Si ya salió de la banda, se descarta por tarde.",
+    stop: "Al otro lado del arranque del impulso.",
+  },
+  {
+    nombre: "Alerta de TradingView",
+    cuando: "Cuando llega un aviso del indicador, no lo detecta el bot.",
+    busca: "Nada por su cuenta: el aviso dice el activo y la dirección. A partir de ahí manda el agente de entrada, que espera a que el precio vuelva al nivel de ruptura (3 minutos) en vez de comprar a mercado.",
+    stop: "Detrás del nivel clave más cercano, con medio ATR de colchón.",
+  },
+];
 
 const ESTADO_ESTRATEGIA = {
   pendiente: "⏳ Esperando tu decisión",
