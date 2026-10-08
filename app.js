@@ -1195,7 +1195,9 @@ const VALORES_PREDETERMINADOS = {
   stop_velas: 0,          // medido peor que el stop de precio: 1 vela +14.48%, 2 velas +15.45%, contra +17.04%
   mecha_salida: 30,       // 235 ops: armada en +0.8R sube de +37.62% a +38.36% (factor 1.39 → 1.43)
   mecha_desde: 0.8,       // armada antes (+0.2R) sube el acierto al 61% pero baja el total a +28.85%
-  time_stop_min: 25,
+  salida_reversion5: false, // 14 salidas, 0% de acierto: con ella +39.9%, sin ella +40.89% (y fuera de muestra igual)
+  salida_estructura15: true, // solo 3 salidas en 60 dias: no hay datos para apagarla
+  time_stop_min: 35,       // 225 ops: 25 min da +32.64% y 35 min +40.89% (factor 1.42 → 1.60). 15 min: +22%
   alert_time_stop_min: 10,
   lock_start_pct: 8,      // sigue aportando con el trail puesto (7.79 contra 6.76 sin él)
   lock_keep: 0.5,
@@ -1347,6 +1349,12 @@ ${isAdmin ? `
       <div><label>La estructura manda sobre el porcentaje</label><select name="structure_first">
         <option value="si" ${s.structure_first === false ? "" : "selected"}>Sí: mientras el precio construya, no cierra por %</option>
         <option value="no" ${s.structure_first === false ? "selected" : ""}>No: manda el porcentaje</option></select></div>
+      <div><label>Salida por reversión de 5M</label><select name="salida_reversion5">
+        <option value="no" ${s.salida_reversion5 === false ? "selected" : ""}>Apagada: medida con 0% de acierto en 14 salidas</option>
+        <option value="si" ${s.salida_reversion5 === false ? "" : "selected"}>Encendida: cierra si una vela de 5M rompe la EMA20 en contra</option></select></div>
+      <div><label>Salida por estructura de 15M rota</label><select name="salida_estructura15">
+        <option value="si" ${s.salida_estructura15 === false ? "" : "selected"}>Encendida: solo 3 salidas en 60 días, sin datos para apagarla</option>
+        <option value="no" ${s.salida_estructura15 === false ? "selected" : ""}>Apagada</option></select></div>
       <div><label>Venta en el pico: exigir señal de clímax</label><select name="peak_confirm">
         <option value="si" ${s.peak_confirm === false ? "" : "selected"}>Sí (recomendado: no corta en cada respiro)</option>
         <option value="no" ${s.peak_confirm === false ? "selected" : ""}>No, vender en cuanto devuelva</option></select></div>
@@ -1473,6 +1481,8 @@ ${isAdmin ? `
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
     patch.structure_first = fd.get("structure_first") !== "no";
+    patch.salida_reversion5 = fd.get("salida_reversion5") === "si";
+    patch.salida_estructura15 = fd.get("salida_estructura15") !== "no";
     patch.earnings_block = fd.get("earnings_block") !== "no";
     patch.research_enabled = fd.get("research_mode") !== "off";
     patch.research_auto = fd.get("research_mode") === "auto";
