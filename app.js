@@ -1193,6 +1193,8 @@ const VALORES_PREDETERMINADOS = {
   atr_trail: 1,           // escáner, 146 ops: +9.50% sin él → +13.09% (factor 1.80 → 2.10)
   alert_atr_trail: 2,     // alertas, 103 ops: ×1 da +6.255% y ×2 da +8.105% (el ×1 del escáner aquí resta)
   stop_velas: 0,          // medido peor que el stop de precio: 1 vela +14.48%, 2 velas +15.45%, contra +17.04%
+  mecha_salida: 30,       // 235 ops: armada en +0.8R sube de +37.62% a +38.36% (factor 1.39 → 1.43)
+  mecha_desde: 0.8,       // armada antes (+0.2R) sube el acierto al 61% pero baja el total a +28.85%
   time_stop_min: 25,
   alert_time_stop_min: 10,
   lock_start_pct: 8,      // sigue aportando con el trail puesto (7.79 contra 6.76 sin él)
@@ -1315,6 +1317,8 @@ ${isAdmin ? `
       ${num("atr_trail", "Take profit ATR: el stop persigue al máximo a × ATR de 5M (0 = apagado)", s.atr_trail ?? 1, 0, 5, 0.25)}
       ${num("alert_atr_trail", "Take profit ATR de las ALERTAS (más ancho: la alerta respira más)", s.alert_atr_trail ?? 2, 0, 5, 0.25)}
       ${num("stop_velas", "Stop por estructura: velas de 5M en contra que cierran (0 = apagado, medido peor)", s.stop_velas ?? 0, 0, 5, 1)}
+      ${num("mecha_salida", "Salida por agotamiento: mecha en contra en % del cuerpo de la vela de 5M (0 = apagada)", s.mecha_salida ?? 30, 0, 200, 5)}
+      ${num("mecha_desde", "El agotamiento no se arma hasta +R de recorrido (antes, una mecha es ruido)", s.mecha_desde ?? 0.8, 0, 3, 0.1)}
       ${num("lateral_pct", "No operar si el activo está lateral: percentil de anchura de bandas 15M (0 = apagado)", s.lateral_pct ?? 0.2, 0, 1, 0.05)}
       ${num("entry_retest_min", "Entrada: minutos esperando el retest del nivel (0 = comprar a mercado)", s.entry_retest_min ?? 3, 0, 30, 1)}
       ${num("ema_stop_1m", "Invalidación por EMA de 1M: minutos de aire (0 = apagada)", s.ema_stop_1m ?? 5, 0, 60, 1)}
@@ -1464,7 +1468,7 @@ ${isAdmin ? `
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
       "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min", "alert_time_stop_min",
-      "atr_trail", "alert_atr_trail", "stop_velas", "lateral_pct", "entry_retest_min"]) patch[k] = Number(fd.get(k));
+      "atr_trail", "alert_atr_trail", "stop_velas", "mecha_salida", "mecha_desde", "lateral_pct", "entry_retest_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
