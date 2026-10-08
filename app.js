@@ -15,6 +15,17 @@ const SETUPS = {
   descubierta: "Descubierta por el bot",
 };
 
+/**
+ * Las unicas que se pueden marcar en Configuracion. SETUPS de arriba es solo para PONER NOMBRE a lo
+ * que ya ocurrio, e incluye dos que NO son detectores elegibles:
+ *   · "tradingview" lo decide el interruptor de alertas, no una casilla.
+ *   · "descubierta" lo deciden las estrategias aprobadas en Inteligencia.
+ * Tenerlas como casilla costo caro el 8/10: al guardar el formulario se escribio solo lo marcado y
+ * se desactivaron en silencio Rompimiento, Rebote y Momentum. El bot paso la mañana detectando
+ * señales que luego no miraba.
+ */
+const SETUPS_ELEGIBLES = ["vela_maestra", "rompimiento_ema20", "rebote_ema20", "iman", "momentum"];
+
 const S = { user: null, profile: null, settings: null, trades: [], events: {}, signals: [], watch: [], tab: "panel", charts: [] };
 
 // ---------- utilidades ----------
@@ -1371,7 +1382,7 @@ ${isAdmin ? `
       <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía para las ALERTAS (11:00–14:00 NY)</label>
       <label class="check"><input type="checkbox" name="scan_skip_lunch" ${s.scan_skip_lunch === true ? "checked" : ""}> Pausa del mediodía para el SCANNER (medido: le cuesta dinero)</label></div>
       <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
-        ${Object.entries(SETUPS).map(([k, n]) => `<label class="check"><input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}> ${n}</label>`).join("")}
+        ${SETUPS_ELEGIBLES.map((k) => `<label class="check"><input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}> ${SETUPS[k]}</label>`).join("")}
       </div></div>
       <div style="grid-column:1/-1" class="row">
         <button class="btn primary">Guardar</button>
@@ -1469,7 +1480,10 @@ ${isAdmin ? `
     patch.close_eod = true;
     patch.skip_lunch = fd.get("skip_lunch") === "on";
     patch.scan_skip_lunch = fd.get("scan_skip_lunch") === "on";
-    patch.setups = fd.getAll("setup");
+    // Se conserva lo que NO es casilla (tradingview, descubierta): el formulario no las gobierna y
+    // borrarlas al guardar fue lo que apago el camino de las alertas sin que nadie lo pidiera.
+    const noElegibles = (s.setups ?? []).filter((k) => !SETUPS_ELEGIBLES.includes(k));
+    patch.setups = [...fd.getAll("setup"), ...noElegibles];
     if (patch.delta_min >= patch.delta_max) return toast("El delta mínimo debe ser menor que el máximo");
     if (patch.dte_min > patch.dte_max) return toast("Revisa el rango de vencimiento");
     await saveSettings(patch);
