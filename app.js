@@ -704,11 +704,23 @@ async function viewIntelligence(v) {
   v.insertAdjacentHTML("beforeend", `
   <section class="card">
     <h2>Inteligencia del bot</h2>
-    <p class="muted">Los agentes vigilantes guardan cada movimiento de cada posición. Cada tarde el agente de aprendizaje resume los resultados
-    y el scanner los usa: sube el score de lo que funciona, lo baja en lo que falla y bloquea un setup en un activo si viene perdiendo
-    (necesita al menos 8 trades para opinar).</p>
+    <p class="muted">Los agentes vigilantes guardan cada movimiento de cada posición y cada tarde el agente de aprendizaje
+    resume los resultados. Desde el 8/10 <b>solo recomienda</b>: calcula lo que haría, lo propone aquí abajo y
+    <b>no cambia nada por su cuenta</b> — ni el score ni las señales. Lo que se aplica lo apruebas tú.</p>
     <div id="aiStats" class="muted">Cargando…</div>
   </section>
+
+  ${S.profile?.role === "admin" ? `
+  <section class="card">
+    <div class="row"><h2 style="margin:0">💡 Recomendaciones del aprendizaje</h2><div class="spacer"></div>
+      <span class="badge">Solo administrador</span></div>
+    <p class="muted">Lo que el agente propone con los resultados reales (necesita 8 operaciones cerradas para opinar).
+    Nada de esto está aplicado hasta que le des a Aplicar.</p>
+    <div id="recos" class="muted">Cargando…</div>
+    <h3 style="margin-top:16px">Bloqueos que aprobaste</h3>
+    <div id="bloqueos" class="muted">Cargando…</div>
+  </section>
+  ` : ""}
   ${S.profile?.role === "admin" ? `
   <section class="card">
     <div class="row"><h2 style="margin:0">📖 Cómo opera el bot</h2><div class="spacer"></div>
@@ -768,6 +780,7 @@ async function viewIntelligence(v) {
       <td class="num">${t.left_on_table_r != null ? "+" + (+t.left_on_table_r).toFixed(2) + "R" : "—"}</td>
       <td style="white-space:normal;min-width:260px">${esc(t.lesson)}</td></tr>`).join("")}</tbody></table></div>`
     : `<div class="empty">Aún no hay trades analizados. El analista revisa cada cierre unos 45 minutos después.</div>`;
+  loadRecomendaciones();
   if (DEMO) return ($("#aiStats").innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
   const { data } = await sb.from("strategy_stats").select("*").order("n", { ascending: false });
   const titles = {
@@ -1680,3 +1693,52 @@ function demoData() {
 }
 
 boot();
+
+/**
+ * Lo que el agente de aprendizaje PROPONE, y los bloqueos que el trader ya aprobó.
+ *
+ * El agente no escribe nunca en aprendizaje_bloqueos: ahí solo llega lo que se aprueba desde aquí.
+ * Esa es toda la diferencia entre un agente que opina y uno que decide.
+ */
+async function loadRecomendaciones() {
+  const caja = $("#recos");
+  if (!caja) return;
+  if (DEMO) return (caja.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
+  const [{ data: recos }, { data: bloq }] = await Promise.all([
+    sb.from("recomendaciones").select("*").eq("estado", "pendiente").order("creada_en", { ascending: false }).limit(30),
+    sb.from("aprendizaje_bloqueos").select("*").order("creado_en", { ascending: false }).limit(30),
+  ]);
+  caja.innerHTML = (recos ?? []).length
+    ? `<div class="table-wrap"><table>
+      <thead><tr><th>Propuesta</th><th>Por qué</th><th class="num">Operaciones</th><th class="num">Acierto</th><th></th></tr></thead>
+      <tbody>${recos.map((r) => `<tr>
+        <td><b>${esc(r.titulo)}</b></td>
+        <td style="white-space:normal;min-width:240px" class="muted">${esc(r.motivo)}</td>
+        <td class="num">${r.evidencia?.n ?? "—"}</td>
+        <td class="num">${r.evidencia?.win_rate != null ? Math.round(r.evidencia.win_rate * 100) + "%" : "—"}</td>
+        <td><button class="btn sm" data-reco-ok="${r.id}">Aplicar</button>
+          <button class="btn sm ghost" data-reco-no="${r.id}">Descartar</button></td>
+      </tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty">Nada que proponer. El agente necesita 8 operaciones cerradas de un setup en un activo para opinar.</div>`;
+  const cajaB = $("#bloqueos");
+  if (cajaB) {
+    cajaB.innerHTML = (bloq ?? []).length
+      ? `<div class="table-wrap"><table><thead><tr><th>Setup</th><th>Activo</th><th>Motivo</th><th></th></tr></thead>
+        <tbody>${bloq.map((b) => `<tr><td>${esc(SETUPS[b.setup] ?? b.setup)}</td><td><b>${esc(b.symbol)}</b></td>
+          <td class="muted" style="white-space:normal">${esc(b.motivo)}</td>
+          <td><button class="btn sm ghost" data-bloq-del="${b.id}">Quitar</button></td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="empty">Ningún bloqueo aprobado.</div>`;
+  }
+  const pulsa = (sel, accion, aviso) =>
+    document.querySelectorAll(sel).forEach((b) => (b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await action({ action: accion, id: +b.dataset.recoOk || +b.dataset.recoNo || +b.dataset.bloqDel });
+        toast(aviso);
+        loadRecomendaciones();
+      } catch (e) { b.disabled = false; toast(e.message); }
+    }));
+  pulsa("[data-reco-ok]", "recomendacion_aplicar", "Aplicada: el bot dejará de operar ese setup en ese activo");
+  pulsa("[data-reco-no]", "recomendacion_descartar", "Descartada");
+  pulsa("[data-bloq-del]", "bloqueo_quitar", "Bloqueo quitado: el bot vuelve a poder operarlo");
+}
