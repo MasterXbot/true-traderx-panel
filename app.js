@@ -1185,6 +1185,7 @@ const VALORES_PREDETERMINADOS = {
   // Contratos
   dte_min: 2,             // el 1 DTE se probó: 5 operaciones, 0% de acierto
   dte_max: 5,
+  min_stop_premium_pct: 12, // 62 de 104 ops reales tenian 1R pagando <10% de la prima: 15% de acierto EN DINERO
   max_spread_pct: 4,      // 104 ops reales: por encima del 4% la horquilla se come la ventaja. Las de >7% dieron 0% de acierto en dinero
   order_type: "limit",    // a mercado se cruza la horquilla entera dos veces; el limite prueba primero al medio +30%
 };
@@ -1316,6 +1317,7 @@ ${isAdmin ? `
       ${num("spread_premium_pct", "…o hasta este % de la prima si la opción es cara (2 = 2%)", s.spread_premium_pct ?? 2, 0, 20, 0.5)}
       ${num("min_open_interest", "Interés abierto mínimo del contrato", s.min_open_interest ?? 1000, 0, 100000, 100)}
       ${num("min_volume", "Volumen del día mínimo (se exige en proporción a la sesión)", s.min_volume ?? 500, 0, 100000, 100)}
+      ${num("min_stop_premium_pct", "Suelo: cuánto tiene que pagar 1R en % de la prima (por debajo, la horquilla se come la ventaja)", s.min_stop_premium_pct ?? 12, 0, 40, 1)}
       ${num("max_spread_pct", "Spread bid/ask MÁXIMO (%) · es un límite, no una preferencia: por encima del 4% no hay ventaja que sobreviva", s.max_spread_pct ?? 4, 1, 100, 0.5)}
       <div><label>Vencimiento del contrato</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>Mañana: mismo día · Tarde: día siguiente</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>Semanal (viernes)</option></select></div>
       ${num("entry_wait_min", "Espera máxima del agente (min)", s.entry_wait_min ?? 20, 2, 120, 1)}
@@ -1411,7 +1413,7 @@ ${isAdmin ? `
     const fd = new FormData(e.target);
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
-      "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
+      "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "min_stop_premium_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
       "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min",
       "atr_trail", "stop_velas", "mecha_salida", "mecha_desde", "lateral_pct", "entry_retest_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
