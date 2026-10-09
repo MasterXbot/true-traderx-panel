@@ -1185,6 +1185,8 @@ const VALORES_PREDETERMINADOS = {
   // Contratos
   dte_min: 2,             // el 1 DTE se probó: 5 operaciones, 0% de acierto
   dte_max: 5,
+  max_spread_pct: 4,      // 104 ops reales: por encima del 4% la horquilla se come la ventaja. Las de >7% dieron 0% de acierto en dinero
+  order_type: "limit",    // a mercado se cruza la horquilla entera dos veces; el limite prueba primero al medio +30%
 };
 
 function viewConfig(v) {
@@ -1314,11 +1316,11 @@ ${isAdmin ? `
       ${num("spread_premium_pct", "…o hasta este % de la prima si la opción es cara (2 = 2%)", s.spread_premium_pct ?? 2, 0, 20, 0.5)}
       ${num("min_open_interest", "Interés abierto mínimo del contrato", s.min_open_interest ?? 1000, 0, 100000, 100)}
       ${num("min_volume", "Volumen del día mínimo (se exige en proporción a la sesión)", s.min_volume ?? 500, 0, 100000, 100)}
-      ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 100, 1)}
+      ${num("max_spread_pct", "Spread bid/ask MÁXIMO (%) · es un límite, no una preferencia: por encima del 4% no hay ventaja que sobreviva", s.max_spread_pct ?? 4, 1, 100, 0.5)}
       <div><label>Vencimiento del contrato</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>Mañana: mismo día · Tarde: día siguiente</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>Semanal (viernes)</option></select></div>
       ${num("entry_wait_min", "Espera máxima del agente (min)", s.entry_wait_min ?? 20, 2, 120, 1)}
       <div><label>Estilo de gestión</label><select name="trade_style"><option value="scalp" ${(s.trade_style ?? "scalp") === "scalp" ? "selected" : ""}>Scalping (5M · 15M · 1H)</option><option value="swing" ${s.trade_style === "swing" ? "selected" : ""}>Swing intradía (15M · 1H)</option></select></div>
-      <div><label>Tipo de orden al comprar/vender</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
+      <div><label>Tipo de orden al comprar/vender (LIMIT prueba primero al punto medio y solo cruza si no llena)</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1" class="alert info">
         <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
