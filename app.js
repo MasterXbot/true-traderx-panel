@@ -11,14 +11,12 @@ const SETUPS = {
   iman: "Imán (reversión a EMA20)",
   momentum: "Momentum",
   rompimiento_ema20: "Rompimiento EMA20",
-  tradingview: "Alerta de TradingView",
   descubierta: "Descubierta por el bot",
 };
 
 /**
  * Las unicas que se pueden marcar en Configuracion. SETUPS de arriba es solo para PONER NOMBRE a lo
  * que ya ocurrio, e incluye dos que NO son detectores elegibles:
- *   · "tradingview" lo decide el interruptor de alertas, no una casilla.
  *   · "descubierta" lo deciden las estrategias aprobadas en Inteligencia.
  * Tenerlas como casilla costo caro el 8/10: al guardar el formulario se escribio solo lo marcado y
  * se desactivaron en silencio Rompimiento, Rebote y Momentum. El bot paso la mañana detectando
@@ -318,7 +316,7 @@ function render() {
   }
   const banners = [];
   if (st.last_error) banners.push(`<div class="alert">⚠ ${esc(st.last_error)}</div>`);
-  if (!st.has_keys) banners.push(`<div class="alert info">👋 <b>Bienvenido a True TraderX.</b> Solo te falta un paso: conecta tu broker en <b>${isAdmin ? "Configuración → Broker" : "Mi broker"}</b>. La estrategia, los stops y las alertas ya vienen configurados por el administrador, y el bot se enciende solo al conectar.</div>`);
+  if (!st.has_keys) banners.push(`<div class="alert info">👋 <b>Bienvenido a True TraderX.</b> Solo te falta un paso: conecta tu broker en <b>${isAdmin ? "Configuración → Broker" : "Mi broker"}</b>. La estrategia y los stops ya vienen configurados por el administrador, y el bot se enciende solo al conectar.</div>`);
   view.insertAdjacentHTML("beforeend", banners.join(""));
   ({ panel: viewPanel, pos: viewPositions, hist: viewHistory, sig: viewSignals, ai: viewIntelligence, cfg: viewConfig, admin: viewAdmin })[S.tab](view);
 }
@@ -725,9 +723,10 @@ async function viewIntelligence(v) {
         <td class="muted" style="white-space:normal;max-width:200px">${esc(r.stop)}</td>
       </tr>`).join("")}</tbody></table></div>
     <p class="muted" style="margin-top:12px"><b>Las salidas son las mismas para todas:</b> el stop persigue al máximo
-    alcanzado a 1 ATR de 5M (2 ATR en las alertas de TradingView), hay candado de ganancia desde +8% de la opción
-    guardando la mitad de lo máximo alcanzado, se asegura la mitad de la posición en +0,75R, y se corta por tiempo a los
-    25 minutos si no arranca (10 minutos en las alertas). Todo se cierra antes del cierre de mercado.</p>
+    alcanzado a 1 ATR de 5M, hay candado de ganancia desde +8% de la opción guardando la mitad de lo máximo alcanzado,
+    se asegura la mitad de la posición en +0,75R, se sale por agotamiento de vela (doji, estrella o mecha del 30% del
+    cuerpo) una vez la posición lleva +0,8R, y se corta por tiempo a los 35 minutos si no arranca. Todo se cierra antes
+    del cierre de mercado.</p>
   </section>` : ""}
   ${S.profile?.role === "admin" ? `
   <section class="card">
@@ -858,12 +857,6 @@ const REFERENCIA = [
     cuando: "Durante toda la sesión.",
     busca: "Tres velas seguidas a favor y sólidas, con un recorrido conjunto un 20% mayor de lo normal y la última con volumen un 30% por encima de su media. Si ya salió de la banda, se descarta por tarde.",
     stop: "Al otro lado del arranque del impulso.",
-  },
-  {
-    nombre: "Alerta de TradingView",
-    cuando: "Cuando llega un aviso del indicador, no lo detecta el bot.",
-    busca: "Nada por su cuenta: el aviso dice el activo y la dirección. A partir de ahí manda el agente de entrada, que espera a que el precio vuelva al nivel de ruptura (3 minutos) en vez de comprar a mercado.",
-    stop: "Detrás del nivel clave más cercano, con medio ATR de colchón.",
   },
 ];
 
@@ -1006,26 +999,6 @@ function timeline(events) {
     `<li><span class="muted mono">${etTime(e.ts)}</span><span class="k-${esc(e.kind)}">${esc(e.message)}</span></li>`).join("")}</ul>`;
 }
 
-async function loadPending() {
-  const box = $("#pending");
-  if (!box) return;
-  if (DEMO) return (box.innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
-  const since = new Date(Date.now() - 8 * 3600e3).toISOString();
-  const { data } = await sb.from("pending_entries").select("*").eq("user_id", S.user.id).gte("created_at", since)
-    .order("created_at", { ascending: false }).limit(15);
-  const label = { waiting: "⏳ Vigilando", entering: "⚡ Entrando", entered: "✅ Entró", cancelled: "✖ Descartada" };
-  box.innerHTML = data?.length ? `<div class="table-wrap"><table>
-    <thead><tr><th>Alerta</th><th>Activo</th><th>Dir</th><th class="num">Precio alerta</th><th class="num">Fondo pullback</th><th class="num">Invalida en</th><th>Estado</th><th>Detalle</th><th></th></tr></thead>
-    <tbody>${data.map((p) => `<tr><td>${etTime(p.created_at)}</td><td><b>${esc(p.symbol)}</b></td><td><span class="badge">${esc(p.dir)}</span></td>
-      <td class="num">${(+p.alert_price).toFixed(2)}</td><td class="num">${(+p.extreme).toFixed(2)}</td><td class="num">${(+p.invalid_price).toFixed(2)}</td>
-      <td>${label[p.status] ?? esc(p.status)}</td><td style="white-space:normal;min-width:220px" class="muted">${esc(p.reason ?? "")}</td>
-      <td>${p.status === "waiting" ? `<button class="btn sm danger" data-cancelpend="${p.id}">Cancelar</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
-    : `<div class="empty">Ninguna alerta en espera hoy.</div>`;
-  box.querySelectorAll("[data-cancelpend]").forEach((b) => (b.onclick = async () => {
-    try { await action({ action: "cancel_pending", id: +b.dataset.cancelpend }); toast("Entrada cancelada"); loadPending(); } catch (err) { toast(err.message); }
-  }));
-}
-
 function viewPositions(v) {
   const open = S.trades.filter((t) => t.status === "open");
   v.insertAdjacentHTML("beforeend", `
@@ -1034,10 +1007,7 @@ function viewPositions(v) {
     ${open.length ? `<button class="btn danger" id="closeAll">🛑 Cerrar todo</button>` : ""}
   </div>
   ${open.length ? `<div class="grid cols-2">${open.map(posCard).join("")}</div>` : `<div class="card empty">No hay posiciones abiertas. El vigilante revisa cada 15 segundos cuando hay trades.</div>`}
-  ${esAdmin() ? `<section class="card" style="margin-top:16px"><h2>⏳ Entradas en espera (agente de entrada)</h2>
-    <p class="muted">Alertas que llegaron en pullback o sin fuerza: el agente las vigila en velas de 1M y entra cuando el precio retoma la dirección. Se cancelan solas si el pullback rompe la estructura o vence el tiempo.</p>
-    <div id="pending" class="muted">Cargando…</div></section>` : ""}`);
-  loadPending();
+`);
   v.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => closeTrade(+b.dataset.close)));
   const ca = $("#closeAll");
   if (ca) ca.onclick = async () => {
@@ -1191,14 +1161,12 @@ function viewSignals(v) {
 const VALORES_PREDETERMINADOS = {
   // Salidas
   atr_trail: 1,           // escáner, 146 ops: +9.50% sin él → +13.09% (factor 1.80 → 2.10)
-  alert_atr_trail: 2,     // alertas, 103 ops: ×1 da +6.255% y ×2 da +8.105% (el ×1 del escáner aquí resta)
   stop_velas: 0,          // medido peor que el stop de precio: 1 vela +14.48%, 2 velas +15.45%, contra +17.04%
   mecha_salida: 30,       // 235 ops: armada en +0.8R sube de +37.62% a +38.36% (factor 1.39 → 1.43)
   mecha_desde: 0.8,       // armada antes (+0.2R) sube el acierto al 61% pero baja el total a +28.85%
   salida_reversion5: false, // 14 salidas, 0% de acierto: con ella +39.9%, sin ella +40.89% (y fuera de muestra igual)
   salida_estructura15: true, // solo 3 salidas en 60 dias: no hay datos para apagarla
   time_stop_min: 35,       // 225 ops: 25 min da +32.64% y 35 min +40.89% (factor 1.42 → 1.60). 15 min: +22%
-  alert_time_stop_min: 10,
   lock_start_pct: 8,      // sigue aportando con el trail puesto (7.79 contra 6.76 sin él)
   lock_keep: 0.5,
   min_profit_pct: 8,
@@ -1211,7 +1179,6 @@ const VALORES_PREDETERMINADOS = {
   entry_volume_min: 1.2,
   entry_vol_min: 1,
   // Horario: el día abierto, que el filtro lo hace el estado del activo
-  alert_open_min: 570,
   scan_open_min: 570,
   scan_second_min: 570,
   entry_last_min: 935,
@@ -1244,32 +1211,6 @@ function viewConfig(v) {
       </div>
     </form>
   </section>
-
-${isAdmin ? `
-  <section class="card">
-    <h2>Alertas de TradingView</h2>
-    <p class="muted">Tu indicador de TradingView puede abrir y cerrar trades además de los setups propios del bot.
-    Cada alerta pasa por el mismo guardián (horarios, almuerzo, límites del día, el 1H manda) y el mismo agente de contrato
-    (ATM/ITM, menor spread). Los webhooks necesitan plan pago de TradingView.</p>
-    <label class="check" style="margin-bottom:12px"><span class="switch"><input type="checkbox" id="tvToggle" ${s.tv_enabled ? "checked" : ""}><span></span></span>
-      <span>${s.tv_enabled ? "Recibiendo alertas de TradingView" : "Alertas de TradingView apagadas"}</span></label>
-    <div class="grid">
-      <div><label>1. Webhook URL (en la alerta: Notificaciones → Webhook URL)</label>
-        <div class="row"><input readonly id="tvUrl" class="mono" value="${esc(TV_URL + "?key=" + (s.tv_key ?? ""))}"><button type="button" class="btn sm" data-copy="tvUrl">Copiar</button></div>
-        <p class="muted" style="margin:4px 0 0;font-size:12px">La URL ya lleva tu llave privada: es la misma para todas tus alertas (CALL, PUT y cierre).</p></div>
-      ${["CALL", "PUT", "CLOSE"].map((a) => `<div><label>2. Mensaje para una alerta de ${a === "CLOSE" ? "cierre" : a} (campo «Mensaje» de la alerta)</label>
-        <div class="row"><input readonly id="tvMsg${a}" class="mono" value='${esc(tvMessage(s.tv_key, a))}'><button type="button" class="btn sm" data-copy="tvMsg${a}">Copiar</button></div></div>`).join("")}
-      <p class="muted" style="margin:0;font-size:12px">{{ticker}} lo rellena TradingView con el activo. El bot también entiende mensajes como
-      "buy NVDA", "sell SPY" o "exit QQQ". No compartas la URL: lleva tu llave. Si se filtra, genera una nueva.</p>
-      <div><label>3. Activo para alertas sin activo (si tu indicador no dice el ticker, ej. "CALL Confirmado")</label>
-        <div class="row"><input id="tvDefault" class="mono" style="max-width:160px;text-transform:uppercase" placeholder="Ej: QQQ" value="${esc(s.tv_default_symbol ?? "")}">
-        <button type="button" class="btn sm" id="tvDefaultSave">Guardar</button></div></div>
-      <div class="row"><button type="button" class="btn danger sm" id="tvRegen">Generar llave nueva</button></div>
-    </div>
-    <h3 style="margin-top:16px">Últimas alertas recibidas</h3>
-    <div id="tvLog" class="muted">Cargando…</div>
-  </section>
-` : ""}
 
   ${isAdmin ? `
   <section class="card">
@@ -1317,7 +1258,6 @@ ${isAdmin ? `
       ${num("lock_keep", "Parte del máximo que asegura el candado (0.5 = la mitad)", s.lock_keep ?? 0.5, 0.2, 0.9, 0.05)}
       ${num("candle_trail", "Stop vela por vela desde × el candado (3 = +24%; 0 = nunca)", s.candle_trail ?? 3, 0, 10, 0.5)}
       ${num("atr_trail", "Take profit ATR: el stop persigue al máximo a × ATR de 5M (0 = apagado)", s.atr_trail ?? 1, 0, 5, 0.25)}
-      ${num("alert_atr_trail", "Take profit ATR de las ALERTAS (más ancho: la alerta respira más)", s.alert_atr_trail ?? 2, 0, 5, 0.25)}
       ${num("stop_velas", "Stop por estructura: velas de 5M en contra que cierran (0 = apagado, medido peor)", s.stop_velas ?? 0, 0, 5, 1)}
       ${num("mecha_salida", "Salida por agotamiento: mecha en contra en % del cuerpo de la vela de 5M (0 = apagada)", s.mecha_salida ?? 30, 0, 200, 5)}
       ${num("mecha_desde", "El agotamiento no se arma hasta +R de recorrido (antes, una mecha es ruido)", s.mecha_desde ?? 0.8, 0, 3, 0.1)}
@@ -1328,9 +1268,7 @@ ${isAdmin ? `
       ${num("ema_stop_peak_r", "La invalidación solo aplica hasta +R de avance", s.ema_stop_peak_r ?? 0.35, 0, 2, 0.05)}
       ${num("entry_vol_min", "Entrada: rango mínimo de la vela de 1M (1 = su rango normal)", s.entry_vol_min ?? 1, 0, 5, 0.1)}
       ${num("entry_volume_min", "Entrada: volumen mínimo de la vela de 1M (1.3 = 30% sobre lo normal)", s.entry_volume_min ?? 1.3, 0, 5, 0.1)}
-      ${num("alert_open_min", "Horario · alertas: minuto de inicio (570 = 9:30, 575 = 9:35)", s.alert_open_min ?? 575, 570, 660, 5)}
       ${num("scan_open_min", "Horario · scanner: minuto de inicio (585 = 9:45)", s.scan_open_min ?? 585, 570, 660, 5)}
-      ${num("alert_time_stop_min", "Corte por tiempo de las alertas (min; los setups usan el suyo)", s.alert_time_stop_min ?? 10, 5, 60, 1)}
       ${num("scan_second_min", "Horario · scanner: desde cuándo operan los setups que no son Vela Maestra (600 = 10:00)", s.scan_second_min ?? 600, 570, 660, 5)}
       ${num("entry_last_min", "Horario · último minuto con entradas nuevas (915 = 15:15, 935 = 15:35)", s.entry_last_min ?? 915, 780, 945, 5)}
       ${num("max_stop_premium_pct", "Descartar contrato si el stop costaría más del % de la prima", s.max_stop_premium_pct ?? 45, 10, 100, 5)}
@@ -1378,9 +1316,6 @@ ${isAdmin ? `
       ${num("min_volume", "Volumen del día mínimo (se exige en proporción a la sesión)", s.min_volume ?? 500, 0, 100000, 100)}
       ${num("max_spread_pct", "Spread bid/ask máx. (%)", s.max_spread_pct, 1, 100, 1)}
       <div><label>Vencimiento del contrato</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>Mañana: mismo día · Tarde: día siguiente</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>Semanal (viernes)</option></select></div>
-      <div><label>Entrada de las alertas</label><select name="entry_mode">
-        <option value="smart" ${(s.entry_mode ?? "smart") === "smart" ? "selected" : ""}>Agente de entrada (espera pullback y confirmación)</option>
-        <option value="immediate" ${s.entry_mode === "immediate" ? "selected" : ""}>Inmediata (al llegar la alerta)</option></select></div>
       ${num("entry_wait_min", "Espera máxima del agente (min)", s.entry_wait_min ?? 20, 2, 120, 1)}
       <div><label>Estilo de gestión</label><select name="trade_style"><option value="scalp" ${(s.trade_style ?? "scalp") === "scalp" ? "selected" : ""}>Scalping (5M · 15M · 1H)</option><option value="swing" ${s.trade_style === "swing" ? "selected" : ""}>Swing intradía (15M · 1H)</option></select></div>
       <div><label>Tipo de orden al comprar/vender</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
@@ -1475,8 +1410,8 @@ ${isAdmin ? `
     const patch = {};
     for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
       "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "alert_open_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min", "alert_time_stop_min",
-      "atr_trail", "alert_atr_trail", "stop_velas", "mecha_salida", "mecha_desde", "lateral_pct", "entry_retest_min"]) patch[k] = Number(fd.get(k));
+      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min",
+      "atr_trail", "stop_velas", "mecha_salida", "mecha_desde", "lateral_pct", "entry_retest_min"]) patch[k] = Number(fd.get(k));
     patch.allow_0dte = fd.get("allow_0dte") === "si";
     patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
     patch.peak_confirm = fd.get("peak_confirm") !== "no";
@@ -1490,12 +1425,11 @@ ${isAdmin ? `
     patch.panel_desde = fd.get("panel_desde") || null;
     patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
     patch.trade_style = fd.get("trade_style") === "swing" ? "swing" : "scalp";
-    patch.entry_mode = fd.get("entry_mode") === "immediate" ? "immediate" : "smart";
     patch.close_eod = true;
     patch.skip_lunch = fd.get("skip_lunch") === "on";
     patch.scan_skip_lunch = fd.get("scan_skip_lunch") === "on";
-    // Se conserva lo que NO es casilla (tradingview, descubierta): el formulario no las gobierna y
-    // borrarlas al guardar fue lo que apago el camino de las alertas sin que nadie lo pidiera.
+    // Se conserva lo que NO es casilla (descubierta): el formulario no la gobierna.
+    
     const noElegibles = (s.setups ?? []).filter((k) => !SETUPS_ELEGIBLES.includes(k));
     patch.setups = [...fd.getAll("setup"), ...noElegibles];
     if (patch.delta_min >= patch.delta_max) return toast("El delta mínimo debe ser menor que el máximo");
@@ -1505,7 +1439,6 @@ ${isAdmin ? `
   };
 
   bindPaper();
-  bindTradingView(v);
 
   if (isAdmin) $("#watchForm").onsubmit = async (e) => {
     e.preventDefault();
@@ -1530,59 +1463,6 @@ ${isAdmin ? `
     if (!DEMO) await sb.from("watchlist").delete().eq("id", id);
     render();
   }));
-}
-
-const TV_URL = SUPABASE_URL + "/functions/v1/tv-webhook";
-function tvMessage(_key, action) {
-  return `${action} {{ticker}}`;
-}
-
-async function bindTradingView(v) {
-  const follow = $("#tvFollow");
-  if (follow) {
-    // Usuario (no admin): solo decide si sigue las alertas del administrador.
-    follow.onchange = async () => {
-      await saveSettings({ tv_follow: follow.checked });
-      toast(follow.checked ? "Siguiendo las alertas del administrador" : "Dejaste de seguir las alertas del administrador");
-    };
-    return loadTvLog("Todavía no llegó ninguna alerta a tu cuenta.");
-  }
-  const toggle = $("#tvToggle");
-  if (!toggle) return;
-  toggle.onchange = async () => {
-    await saveSettings({ tv_enabled: toggle.checked });
-    toast(toggle.checked ? "Alertas de TradingView activadas" : "Alertas de TradingView apagadas");
-  };
-  v.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
-    const el = $("#" + b.dataset.copy);
-    try { await navigator.clipboard.writeText(el.value); } catch { el.select(); document.execCommand("copy"); }
-    toast("Copiado");
-  }));
-  $("#tvDefaultSave").onclick = async () => {
-    const v = $("#tvDefault").value.trim().toUpperCase().replace(/[^A-Z.]/g, "");
-    await saveSettings({ tv_default_symbol: v || null });
-    toast(v ? `Las alertas sin activo se operarán en ${v}` : "Activo por defecto quitado");
-  };
-  $("#tvRegen").onclick = async () => {
-    if (DEMO) return toast("Modo demo");
-    if (!confirm("¿Generar una llave nueva? Tendrás que actualizar el mensaje de TODAS tus alertas en TradingView.")) return;
-    const { data, error } = await sb.rpc("regenerate_tv_key");
-    if (error) return toast(error.message);
-    S.settings.tv_key = data;
-    toast("Llave nueva generada: actualiza tus alertas");
-    render();
-  };
-  return loadTvLog("Todavía no llegan alertas. Crea una alerta en TradingView con el Webhook URL y el mensaje de arriba.");
-}
-
-async function loadTvLog(emptyMsg) {
-  if (DEMO) return ($("#tvLog").innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`);
-  // Solo las alertas de MI cuenta (el admin puede ver las de todos por RLS, pero aquí interesan las suyas).
-  const { data } = await sb.from("tv_alerts").select("*").eq("user_id", S.user.id).order("ts", { ascending: false }).limit(15);
-  $("#tvLog").innerHTML = (data ?? []).length ? `<div class="table-wrap"><table><thead><tr><th>Hora (NY)</th><th>Activo</th><th>Acción</th><th>Resultado</th></tr></thead><tbody>
-    ${data.map((a) => `<tr><td>${etDay(a.ts).slice(5)} ${etTime(a.ts)}</td><td><b>${esc(a.symbol)}</b></td><td>${esc(a.action)}</td>
-      <td style="white-space:normal" class="${/^ENTRÓ|^Cerradas/.test(a.result ?? "") ? "pos" : /^ERROR/.test(a.result ?? "") ? "neg" : "muted"}">${esc(a.result)}</td></tr>`).join("")}
-    </tbody></table></div>` : `<div class="empty">${esc(emptyMsg)}</div>`;
 }
 
 function num(name, label, value, min, max, step) {
@@ -1777,7 +1657,7 @@ function demoData() {
     settings: {
       enabled: true, mode: "paper", broker: "alpaca", has_keys: true, key_hint: "…DEMO", last_equity: 25340.12, alloc_pct: 5, max_contracts: 10,
       max_open_positions: 3, max_trades_per_day: 0, daily_loss_limit_pct: 6, option_stop_pct: 40, delta_min: 0.55, delta_max: 0.7, partial_r: 0.5, dte_min: 5, dte_max: 10,
-      max_spread_pct: 12, max_spread_usd: 10, order_type: "market", expiry_mode: "intraday", trade_style: "scalp", tv_default_symbol: "", min_score: 60, tv_enabled: false, tv_key: "demo-llave", close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
+      max_spread_pct: 12, max_spread_usd: 10, order_type: "market", expiry_mode: "intraday", trade_style: "scalp", min_score: 60, close_eod: true, skip_lunch: true, setups: ["vela_maestra", "rebote_ema20", "iman", "momentum"],
     },
     trades,
     events: {
