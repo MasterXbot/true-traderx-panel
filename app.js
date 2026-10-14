@@ -370,8 +370,34 @@ async function toggleBot(on) {
     return render();
   }
   if (on && S.settings.mode === "live" && !confirm("El bot operará con DINERO REAL. ¿Confirmas?")) return render();
-  await saveSettings({ enabled: on });
-  toast(on ? "Bot encendido" : "Bot apagado");
+  if (DEMO) {
+    S.settings.enabled = on;
+    toast(on ? "Bot encendido" : "Bot apagado");
+    return render();
+  }
+  // El interruptor se bloquea mientras el servidor contesta: dos clics seguidos dejarian la
+  // pantalla diciendo una cosa y la base de datos otra.
+  const sw = $("#botToggle");
+  if (sw) sw.disabled = true;
+  try {
+    const r = await action({ action: on ? "bot_encender" : "bot_apagar" });
+    if (!r) throw new Error("sin respuesta del servidor");
+    S.settings.enabled = r.enabled;
+    // Apagar NO abandona lo que esta abierto: el vigilante sigue con su stop y su toma de
+    // ganancia hasta que cierren. Se dice con esas palabras para que nadie se quede en la duda.
+    toast(
+      r.enabled
+        ? "Bot encendido"
+        : r.abiertas
+        ? `Bot apagado: no abrirá entradas nuevas. Las ${r.abiertas} posiciones abiertas siguen vigiladas hasta que cierren.`
+        : "Bot apagado: no abrirá entradas nuevas.",
+      r.abiertas && !r.enabled ? 7000 : 3000,
+    );
+  } catch (err) {
+    // Lo importante: el interruptor vuelve a donde estaba. Nunca se queda diciendo lo que no es.
+    toast("No se pudo cambiar: " + err.message, 6000);
+  }
+  render();
 }
 
 async function saveSettings(patch) {
