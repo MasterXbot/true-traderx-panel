@@ -6,12 +6,46 @@ const DEMO = SUPABASE_URL.includes("TU-PROYECTO");
 const sb = DEMO ? null : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const SETUPS = {
+  // --- Las cinco de la casa ---
   vela_maestra: "Vela Maestra (apertura)",
+  rompimiento_ema20: "Rompimiento EMA20",
   rebote_ema20: "Rebote EMA20",
   iman: "Imán (reversión a EMA20)",
   momentum: "Momentum",
-  rompimiento_ema20: "Rompimiento EMA20",
+  // --- Su protocolo de la guía maestra ---
+  master_x: "Master X (protocolo de confirmación)",
+  // --- Las tres del Bot Familiar (informe del 13/10/2026) ---
+  squeeze_breakout: "Squeeze Breakout (compresión Bollinger)",
+  giro_sma20: "Giro de la SMA20 (15M)",
+  barrido_liquidez: "Barrido de liquidez",
+  // --- Las demás que el bot sabe detectar ---
+  iman_gap: "Imán de apertura (hueco)",
+  ruptura_dia: "Ruptura del día anterior",
+  ruptura_dia_1h: "Ruptura del día anterior (1H)",
+  apertura_bandas: "Apertura de bandas",
+  agotamiento: "Agotamiento (vela fuera de banda)",
+  continuacion_apertura: "Continuación de apertura",
+  // --- No es un detector escrito a mano ---
   descubierta: "Descubierta por el bot",
+};
+
+// La frase que explica cada una, para que la casilla no sea un nombre a secas.
+const SETUPS_QUE_ES = {
+  vela_maestra: "La 1ª vela de 15M marca intención y la 2ª confirma sin devolver la mitad.",
+  rompimiento_ema20: "El precio rompe la EMA20 y se va con ella.",
+  rebote_ema20: "En tendencia, el precio besa la EMA20 y sigue.",
+  iman: "El precio se ha ido lejos de la EMA20 y vuelve a ella.",
+  momentum: "Empuje sostenido en la dirección del marco que manda.",
+  master_x: "Su protocolo: vela maestra, confirmación y la regla del gris.",
+  squeeze_breakout: "Las Bollinger venían comprimidas y rompen con volumen alto.",
+  giro_sma20: "La SMA20 de 15M gira y la pendiente nueva es más fuerte de lo normal.",
+  barrido_liquidez: "La mecha se lleva el extremo anterior pero el cierre vuelve adentro.",
+  iman_gap: "El activo abre con un salto que lo deja fuera de Bollinger.",
+  ruptura_dia: "Rompe el máximo o el mínimo de ayer con la volatilidad abriéndose.",
+  ruptura_dia_1h: "La misma ruptura buscada en la vela de 1H: muchas menos entradas.",
+  apertura_bandas: "Las bandas se abren y la que se abre marca la dirección.",
+  agotamiento: "La vela sale entera de la banda y la rechazan. Se entra en contra.",
+  continuacion_apertura: "1ª vela de 5M de la sesión y la 2ª sigue empujando.",
 };
 
 /**
@@ -22,7 +56,16 @@ const SETUPS = {
  * se desactivaron en silencio Rompimiento, Rebote y Momentum. El bot paso la mañana detectando
  * señales que luego no miraba.
  */
-const SETUPS_ELEGIBLES = ["vela_maestra", "rompimiento_ema20", "rebote_ema20", "iman", "momentum"];
+// Todas las que el bot sabe detectar de verdad, agrupadas como se ensenan en Configuracion. La
+// unica que NO es casilla es "descubierta": no es un detector escrito a mano, son condiciones que
+// se aprueban en Inteligencia y el escaner evalua aparte (las filtra antes de llamar a analyze).
+const GRUPOS_SETUPS = [
+  ["Las cinco de la casa", ["vela_maestra", "rompimiento_ema20", "rebote_ema20", "iman", "momentum"]],
+  ["Su guía maestra", ["master_x"]],
+  ["Las tres del Bot Familiar", ["squeeze_breakout", "giro_sma20", "barrido_liquidez"]],
+  ["Las demás, medidas y disponibles", ["iman_gap", "ruptura_dia", "ruptura_dia_1h", "apertura_bandas", "agotamiento", "continuacion_apertura"]],
+];
+const SETUPS_ELEGIBLES = GRUPOS_SETUPS.flatMap(([, ks]) => ks);
 
 const S = { user: null, profile: null, settings: null, trades: [], events: {}, signals: [], watch: [], tab: "panel", charts: [] };
 
@@ -1360,9 +1403,18 @@ ${isAdmin ? `
       </div>
       <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía para las ALERTAS (11:00–14:00 NY)</label>
       <label class="check"><input type="checkbox" name="scan_skip_lunch" ${s.scan_skip_lunch === true ? "checked" : ""}> Pausa del mediodía para el SCANNER (medido: le cuesta dinero)</label></div>
-      <div style="grid-column:1/-1"><label>Estrategias activas</label><div class="row">
-        ${SETUPS_ELEGIBLES.map((k) => `<label class="check"><input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}> ${SETUPS[k]}</label>`).join("")}
-      </div></div>
+      <div style="grid-column:1/-1"><label>Estrategias activas</label>
+        <p class="muted sm" style="margin:2px 0 8px">Marcada = el bot la busca en cada vela. Son las ${SETUPS_ELEGIBLES.length} que sabe detectar; las que encuentra él solo se aprueban en Inteligencia, no aquí.</p>
+        ${GRUPOS_SETUPS.map(([titulo, claves]) => `
+          <div class="setup-grupo">
+            <div class="setup-grupo-tit">${esc(titulo)}</div>
+            ${claves.map((k) => `
+              <label class="check setup-chk" title="${esc(SETUPS_QUE_ES[k] ?? "")}">
+                <input type="checkbox" name="setup" value="${k}" ${(s.setups ?? []).includes(k) ? "checked" : ""}>
+                <span><b>${esc(SETUPS[k])}</b><span class="setup-que">${esc(SETUPS_QUE_ES[k] ?? "")}</span></span>
+              </label>`).join("")}
+          </div>`).join("")}
+      </div>
       <div style="grid-column:1/-1" class="row">
         <button class="btn primary">Guardar</button>
         <button type="button" class="btn" id="resetPredeterminados" title="Devuelve cada ajuste a su valor predeterminado, el que gano midiendo con datos reales. No guarda: los marca para que los revises.">↩︎ Valores predeterminados</button>

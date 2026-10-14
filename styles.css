@@ -156,6 +156,17 @@ tr.clickable:hover td { background: var(--panel-2); }
 .dot.media { background: var(--accent); }
 .dot.earn { background: var(--blue); }
 
+/* Las casillas de estrategia: cuatro grupos, cada casilla con el nombre en negrita y debajo la
+   frase que dice que busca. Dos columnas cuando hay sitio, una sola en el movil. */
+.setup-grupo { margin: 0 0 10px; }
+.setup-grupo-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin: 0 0 4px; }
+.setup-grupo { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2px 14px; }
+.setup-grupo-tit { grid-column: 1/-1; }
+.setup-chk { align-items: flex-start; padding: 3px 0; }
+.setup-chk input { margin-top: 3px; flex: none; }
+.setup-chk > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.setup-que { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
 .cal-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin: 2px 0 4px; }
 /* El evento pasa de una linea a un bloque: hora y punto a la izquierda, y a la derecha el titulo
    con su resumen debajo. `align-items: flex-start` para que la hora quede a la altura del titulo */
