@@ -411,6 +411,17 @@ async function loadCalendario() {
   if (!data?.length) {
     return (box.innerHTML = `<div class="empty">Sin eventos cargados. Se actualiza cada mañana a las 6:40 AM NY.</div>`);
   }
+  // LAS CIFRAS QUE YA TENIAMOS GUARDADAS Y NO SE ENSEÑABAN. La tabla trae previsión y dato
+  // anterior de casi todos los eventos macro (y beneficio por acción esperado en resultados), y
+  // el panel las estaba tirando. Son el detalle que convierte "Existing Home Sales" en algo que
+  // se puede leer de un vistazo: si sale por debajo de lo previsto, el mercado reacciona.
+  const cifras = (e) => {
+    const partes = [];
+    if (e.consensus) partes.push(`${e.kind === "earnings" ? "se espera" : "previsión"} ${esc(e.consensus)}`);
+    if (e.previous) partes.push(`${e.kind === "earnings" ? "año pasado" : "anterior"} ${esc(e.previous)}`);
+    return partes.length ? `<span class="cal-cifras">${partes.join(" · ")}</span>` : "";
+  };
+
   const porDia = {};
   for (const e of data) (porDia[e.day] ??= []).push(e);
   const dias = Object.keys(porDia).slice(0, 5);
@@ -439,7 +450,11 @@ async function loadCalendario() {
         <div class="cal-ev">
           <span class="cal-hora">${esc(e.time_et.replace("todo el día", "—"))}</span>
           <i class="dot ${e.kind === "earnings" ? "earn" : e.importance >= 3 ? "alta" : "media"}"></i>
-          <span class="cal-txt">${esc(e.symbol ? `${e.symbol}: resultados` : e.title)}</span>
+          <div class="cal-cuerpo">
+            <span class="cal-txt">${esc(e.symbol ? `${e.symbol}: resultados` : e.title)}</span>
+            ${e.resumen ? `<span class="cal-res">${esc(e.resumen)}</span>` : ""}
+            ${cifras(e)}
+          </div>
         </div>`).join("")
       : `<div class="cal-tit">${titulo}</div><div class="cal-ev muted">Sin eventos relevantes</div>`;
   };

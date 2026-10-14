@@ -157,9 +157,16 @@ tr.clickable:hover td { background: var(--panel-2); }
 .dot.earn { background: var(--blue); }
 
 .cal-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin: 2px 0 4px; }
-.cal-ev { display: flex; align-items: center; gap: 7px; padding: 3px 0; font-size: 12px; line-height: 1.35; }
-.cal-hora { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; }
+/* El evento pasa de una linea a un bloque: hora y punto a la izquierda, y a la derecha el titulo
+   con su resumen debajo. `align-items: flex-start` para que la hora quede a la altura del titulo */
+.cal-ev { display: flex; align-items: flex-start; gap: 7px; padding: 6px 0; font-size: 12px; line-height: 1.35; }
+.cal-ev + .cal-ev { border-top: 1px solid var(--line, rgba(128,128,128,.14)); }
+.cal-hora { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; padding-top: 1px; }
+.cal-ev .dot { margin-top: 5px; flex: none; }
+.cal-cuerpo { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .cal-txt { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-res { color: var(--muted); font-size: 11px; line-height: 1.35; white-space: normal; }
+.cal-cifras { color: var(--muted); font-size: 11px; opacity: .85; font-variant-numeric: tabular-nums; }
 
 /* Récord diario */
 .rec-w { color: var(--green); }
