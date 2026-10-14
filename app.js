@@ -75,7 +75,27 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const usd = (n) => (n == null || isNaN(n) ? "—" : (n < 0 ? "-" : "") + "$" + Math.abs(+n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const cls = (n) => (+n > 0 ? "pos" : +n < 0 ? "neg" : "");
 const etDay = (iso) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-const etTime = (iso) => new Date(iso).toLocaleTimeString("es", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" });
+// LA HORA EN 12 HORAS, con am/pm en minuscula. Peticion suya del 14/10/2026: "cuando son las
+// 13:00 es la 1 pm, y asi, no uses mas ese formato de 24h".
+const hora12 = (mins) => {
+  const m = ((Math.round(mins) % 1440) + 1440) % 1440;
+  const h24 = Math.floor(m / 60);
+  const h = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h}:${String(m % 60).padStart(2, "0")} ${h24 < 12 ? "am" : "pm"}`;
+};
+// Lo mismo desde un texto "HH:MM". Lo que no encaje ("todo el día", "antes de abrir") pasa igual.
+const hora12De = (txt) => {
+  const s = String(txt ?? "").trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  return m ? hora12(+m[1] * 60 + +m[2]) : s;
+};
+const etTime = (iso) => {
+  const p = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hourCycle: "h23", hour: "2-digit", minute: "2-digit",
+  }).formatToParts(new Date(iso));
+  const g = (k) => Number(p.find((x) => x.type === k).value);
+  return hora12(g("hour") * 60 + g("minute"));
+};
 const today = () => etDay(new Date().toISOString());
 function toast(msg, ms = 3500) {
   const t = $("#toast");
@@ -517,7 +537,7 @@ async function loadCalendario() {
     $("#calLista").innerHTML = evs.length
       ? `<div class="cal-tit">${titulo}</div>` + evs.map((e) => `
         <div class="cal-ev">
-          <span class="cal-hora">${esc(e.time_et.replace("todo el día", "—"))}</span>
+          <span class="cal-hora">${esc(hora12De(e.time_et).replace("todo el día", "—"))}</span>
           <i class="dot ${e.kind === "earnings" ? "earn" : e.importance >= 3 ? "alta" : "media"}"></i>
           <div class="cal-cuerpo">
             <span class="cal-txt">${esc(e.symbol ? `${e.symbol}: resultados` : e.title)}</span>
@@ -1369,7 +1389,7 @@ ${isAdmin ? `
       ${num("entry_vol_min", "Entrada: rango mínimo de la vela de 1M (1 = su rango normal)", s.entry_vol_min ?? 1, 0, 5, 0.1)}
       ${num("entry_volume_min", "Entrada: volumen mínimo de la vela de 1M (1.3 = 30% sobre lo normal)", s.entry_volume_min ?? 1.3, 0, 5, 0.1)}
       ${num("scan_open_min", "Horario · scanner: minuto de inicio (585 = 9:45)", s.scan_open_min ?? 585, 570, 660, 5)}
-      ${num("scan_second_min", "Horario · scanner: desde cuándo operan los setups que no son Vela Maestra (600 = 10:00)", s.scan_second_min ?? 600, 570, 660, 5)}
+      ${num("scan_second_min", "Horario · scanner: desde cuándo operan los setups que no son Vela Maestra (600 = 10:00 am)", s.scan_second_min ?? 600, 570, 660, 5)}
       ${num("entry_last_min", "Horario · último minuto con entradas nuevas (915 = 15:15, 935 = 15:35)", s.entry_last_min ?? 915, 780, 945, 5)}
       ${num("max_stop_premium_pct", "Descartar contrato si el stop costaría más del % de la prima", s.max_stop_premium_pct ?? 45, 10, 100, 5)}
       ${num("hold_volume", "Salida: aguantar mientras el volumen 5M supere (× su media)", s.hold_volume ?? 1.2, 0, 5, 0.1)}
@@ -1422,12 +1442,12 @@ ${isAdmin ? `
       <div><label>Tipo de orden al comprar/vender (LIMIT prueba primero al punto medio y solo cruza si no llena)</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
       ${num("min_score", "Score mínimo de entrada", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1" class="alert info">
-        <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 15:50 NY) ·
+        <b>Reglas fijas de los vigilantes</b> (no se pueden desactivar): nunca se pasa la noche con contratos abiertos (cierre 3:50 pm NY) ·
         el horario de entradas se ajusta arriba (inicio, pausa del mediodía y último minuto) ·
         nunca contratos fuera del dinero: solo en el dinero hasta 3% ITM, con el delta que más responde y luego el menor spread (máximo US${esc(S.settings?.max_spread_usd ?? 10)} por contrato o el ${esc(S.settings?.spread_premium_pct ?? 2)}% de la prima en las caras) · el 1H manda: si cambia de dirección se sale ·
-        el día del vencimiento se cierra a las 15:30.
+        el día del vencimiento se cierra a la 3:30 pm.
       </div>
-      <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía para las ALERTAS (11:00–14:00 NY)</label>
+      <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> Pausa del mediodía para las ALERTAS (11:00 am–2:00 pm NY)</label>
       <label class="check"><input type="checkbox" name="scan_skip_lunch" ${s.scan_skip_lunch === true ? "checked" : ""}> Pausa del mediodía para el SCANNER (medido: le cuesta dinero)</label></div>
       <div style="grid-column:1/-1"><label>Estrategias activas</label>
         <p class="muted sm" style="margin:2px 0 8px">Marcada = el bot la busca en cada vela. Son las ${SETUPS_ELEGIBLES.length} que sabe detectar; las que encuentra él solo se aprueban en Inteligencia, no aquí.</p>
