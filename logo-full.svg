@@ -1,0 +1,23 @@
+<svg width="460" height="480" viewBox="0 0 460 480" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdf0c8"/>
+      <stop offset="35%" stop-color="#e8c368"/>
+      <stop offset="65%" stop-color="#c99a2e"/>
+      <stop offset="100%" stop-color="#8a6b1f"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(88, 40) scale(2.15)">
+    <!-- M -->
+    <polyline points="8,84 8,16 34,52 60,16 60,84" fill="none" stroke="url(#gold)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- X -->
+    <line x1="60" y1="16" x2="110" y2="84" stroke="url(#gold)" stroke-width="11" stroke-linecap="round"/>
+    <line x1="60" y1="84" x2="116" y2="22" stroke="url(#gold)" stroke-width="11" stroke-linecap="round"/>
+    <!-- Breakout arrowhead -->
+    <polygon points="125,12 121,27 111,17" fill="url(#gold)"/>
+  </g>
+
+  <text x="230" y="400" text-anchor="middle" font-family="'Arial Black', Arial, sans-serif" font-weight="900" font-size="50" letter-spacing="4" fill="url(#gold)">MASTER X</text>
+  <text x="230" y="445" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="24" letter-spacing="10" fill="url(#gold)">TRUE DATA</text>
+</svg>

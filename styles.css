@@ -1,0 +1,247 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #121821;
+  --panel-2: #18202b;
+  --line: #243040;
+  --text: #e6edf3;
+  --muted: #8b98a8;
+  --accent: #f59e0b; /* naranja de acento */
+  --green: #22c55e;
+  --red: #ef4444;
+  --blue: #38bdf8;
+  --radius: 12px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 Inter, system-ui, sans-serif; }
+a { color: var(--blue); }
+.mono, .num { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+.center { display: grid; place-items: center; min-height: 60vh; }
+
+/* ---------- layout ---------- */
+header.top {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 12px 20px; background: rgba(11, 15, 20, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; letter-spacing: .3px; }
+.brand span { color: var(--accent); }
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand .logo { height: 26px; width: auto; }
+.brand-lg { font-size: 22px; flex-direction: column; justify-content: center; margin-bottom: 16px; gap: 10px; }
+.brand-lg .logo { height: 72px; }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+nav.tabs button {
+  background: none; border: 0; color: var(--muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit;
+}
+nav.tabs button.active, nav.tabs button:hover { color: var(--text); background: var(--panel-2); }
+.spacer { flex: 1; }
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
+
+.grid { display: grid; gap: 12px; }
+.kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.cols-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+.card h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.kpi .v { font-size: 26px; font-weight: 700; }
+.kpi .s { color: var(--muted); font-size: 12px; }
+section + section { margin-top: 16px; }
+h2 { font-size: 18px; margin: 0 0 12px; }
+
+/* ---------- controls ---------- */
+button.btn, .btn {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px;
+  cursor: pointer; font: inherit; font-weight: 500;
+}
+.btn:hover { border-color: #3a4a60; }
+.btn.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+.btn.danger { background: transparent; color: var(--red); border-color: rgba(239, 68, 68, .5); }
+.btn.sm { padding: 4px 10px; font-size: 12px; }
+.btn:disabled { opacity: .5; cursor: default; }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+input, select {
+  width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit;
+}
+input:focus, select:focus { outline: 2px solid rgba(245, 158, 11, .4); border-color: var(--accent); }
+.form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin: 0; }
+.check input { width: auto; }
+
+.switch { position: relative; width: 46px; height: 26px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 26px; cursor: pointer; transition: .2s; }
+.switch span::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.switch input:checked + span { background: var(--green); }
+.switch input:checked + span::before { transform: translateX(20px); }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--line); }
+.badge.call { color: var(--green); border-color: rgba(34, 197, 94, .4); }
+.badge.put { color: var(--red); border-color: rgba(239, 68, 68, .4); }
+.badge.live { background: var(--red); color: #fff; border: 0; }
+.badge.paper { background: var(--blue); color: #04121c; border: 0; }
+.badge.lateral { color: var(--muted); }
+
+/* ---------- tables ---------- */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+td.num, th.num { text-align: right; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--panel-2); }
+
+/* ---------- positions ---------- */
+.pos-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.pos-card .sym { font-size: 18px; font-weight: 700; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.stats div { background: var(--panel-2); border-radius: 8px; padding: 8px; }
+.stats b { display: block; font-size: 15px; }
+.stats small { color: var(--muted); font-size: 11px; }
+.bar { position: relative; height: 8px; background: var(--panel-2); border-radius: 8px; margin: 6px 0 12px; overflow: hidden; }
+.bar i { position: absolute; top: 0; bottom: 0; border-radius: 8px; }
+
+.alert { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(239, 68, 68, .4); background: rgba(239, 68, 68, .08); margin-bottom: 16px; }
+.alert.info { border-color: rgba(56, 189, 248, .4); background: rgba(56, 189, 248, .08); }
+.auth { max-width: 380px; margin: 10vh auto; }
+.auth .card { padding: 24px; }
+.chart-box { position: relative; height: 240px; }
+/* La curva de dinero ocupa el ancho entero del panel: con 240px salia aplastada. */
+.chart-box.alto { height: 320px; }
+@media (max-width: 720px) { .chart-box.alto { height: 240px; } }
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line);
+  padding: 10px 16px; border-radius: 10px; z-index: 50; max-width: calc(100% - 32px);
+}
+.empty { text-align: center; color: var(--muted); padding: 30px; }
+
+@media (max-width: 640px) {
+  header.top { padding: 10px 16px; }
+  .kpi .v { font-size: 22px; }
+}
+
+/* Contraseña con botón para verla */
+.pass-wrap { position: relative; }
+.pass-wrap input { width: 100%; padding-right: 40px; }
+.pass-eye {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; cursor: pointer; font-size: 16px; line-height: 1;
+  padding: 4px 6px; opacity: .75;
+}
+.pass-eye:hover { opacity: 1; }
+
+/* ---------- Calendario compacto ---------- */
+.cal-card { padding: 12px 14px; }
+.cal-card h3 { font-size: 13px; letter-spacing: .3px; text-transform: uppercase; color: var(--muted); }
+.sm { font-size: 12px; }
+
+.cal-strip { display: flex; gap: 6px; margin: 10px 0 8px; }
+.cal-day {
+  flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px 2px 5px; cursor: pointer; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; gap: 1px; transition: border-color .15s, background .15s;
+}
+.cal-day:hover { border-color: #3a4a60; }
+.cal-day.sel { border-color: var(--accent); background: rgba(245, 158, 11, .08); }
+.cal-day.hoy .cal-num { color: var(--accent); }
+.cal-dow { font-size: 10px; color: var(--muted); letter-spacing: .5px; }
+.cal-num { font-size: 16px; font-weight: 700; line-height: 1.1; }
+.cal-dots { display: flex; gap: 3px; height: 6px; align-items: center; }
+
+.dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.alta { background: var(--red); }
+.dot.media { background: var(--accent); }
+.dot.earn { background: var(--blue); }
+
+/* Las casillas de estrategia: cuatro grupos, cada casilla con el nombre en negrita y debajo la
+   frase que dice que busca. Dos columnas cuando hay sitio, una sola en el movil. */
+.setup-grupo { margin: 0 0 10px; }
+.setup-grupo-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin: 0 0 4px; }
+.setup-grupo { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2px 14px; }
+.setup-grupo-tit { grid-column: 1/-1; }
+.setup-chk { align-items: flex-start; padding: 3px 0; }
+.setup-chk input { margin-top: 3px; flex: none; }
+.setup-chk > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.setup-que { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
+.cal-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin: 2px 0 4px; }
+/* El evento pasa de una linea a un bloque: hora y punto a la izquierda, y a la derecha el titulo
+   con su resumen debajo. `align-items: flex-start` para que la hora quede a la altura del titulo */
+.cal-ev { display: flex; align-items: flex-start; gap: 7px; padding: 6px 0; font-size: 12px; line-height: 1.35; }
+.cal-ev + .cal-ev { border-top: 1px solid var(--line, rgba(128,128,128,.14)); }
+.cal-hora { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; padding-top: 1px; }
+.cal-ev .dot { margin-top: 5px; flex: none; }
+.cal-cuerpo { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cal-txt { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-res { color: var(--muted); font-size: 11px; line-height: 1.35; white-space: normal; }
+.cal-cifras { color: var(--muted); font-size: 11px; opacity: .85; font-variant-numeric: tabular-nums; }
+
+/* Récord diario */
+.rec-w { color: var(--green); }
+.rec-l { color: var(--red); }
+
+/* ---------- tabla de posiciones estilo broker ---------- */
+/* Lo importante se lee de un vistazo: el precio al que se compró, lo que vale ahora y el resultado. */
+/* COMPACTA A PROPOSITO (21/10/2026). Con doce columnas, 12px a cada lado obligaban a
+   desplazar la tabla en horizontal incluso en pantallas anchas. Lo que se recorta es el aire
+   entre columnas, no el tamano de los numeros: esos se siguen leyendo igual. */
+table.broker td, table.broker th { padding: 7px 8px; white-space: nowrap; }
+table.broker td:first-child, table.broker th:first-child { padding-left: 12px; }
+table.broker td:last-child, table.broker th:last-child { padding-right: 12px; }
+table.broker tbody td { font-variant-numeric: tabular-nums; }
+table.broker tfoot td { border-top: 2px solid var(--line); border-bottom: none; padding-top: 12px; }
+table.broker tfoot { background: var(--panel-2); }
+table.broker .badge { margin-left: 6px; }
+
+/* ===========================================================================================
+   ANÁLISIS DE MERCADO, dentro del Panel.
+   Encargo suyo del 20/10/2026: una tarjeta con selector, como su foto. No una página entera,
+   que es lo que hice primero y me corrigió.
+   =========================================================================================== */
+
+.macro-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 14px 0 12px; flex-wrap: wrap; }
+
+.macro-select {
+  min-width: 230px; max-width: 100%;
+  padding: 9px 12px; border-radius: 10px;
+  background: var(--card2, rgba(148, 163, 184, .06));
+  border: 1px solid var(--line); color: inherit; font: inherit; font-size: 14px;
+}
+.macro-select:focus { outline: none; border-color: #818cf8; }
+
+.macro-titular {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 13px 15px; margin-bottom: 16px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(148, 163, 184, .05);
+}
+.macro-titular.pos { border-color: rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .06); }
+.macro-titular.neg { border-color: rgba(239, 68, 68, .35); background: rgba(239, 68, 68, .06); }
+
+.macro-sel-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.macro-sel-precio { display: flex; align-items: baseline; gap: 10px; font-size: 19px; font-weight: 600; }
+
+/* El aviso de "aquí subir es malo": en ámbar, que no se confunda con un error. */
+.macro-aviso {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; font-size: 13px;
+  background: rgba(245, 158, 11, .08); border: 1px solid rgba(245, 158, 11, .3);
+}
+
+.macro-marcos { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 14px 0; }
+.macro-marco { padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.macro-marco-sesgo { font-size: 19px; font-weight: 600; margin: 6px 0 10px; }
+.macro-fila { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
+
+.row-between { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.small { font-size: 12px; }
+
+/* Aviso de version nueva. Abajo y centrado, por encima de todo: el panel instalado en el movil se
+   queda abierto durante horas y hay que poder verlo sin buscarlo. */
+.version-nueva {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 60;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel-2); border: 1px solid var(--accent); border-radius: 12px;
+  padding: 10px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.45); max-width: calc(100% - 32px);
+}
