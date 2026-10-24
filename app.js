@@ -39,6 +39,45 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const usd = (n) => (n == null || isNaN(n) ? "—" : (n < 0 ? "-" : "") + "$" + Math.abs(+n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const cls = (n) => (+n > 0 ? "pos" : +n < 0 ? "neg" : "");
+/**
+ * EL COLOR SE LEE DEL CSS, NO SE ESCRIBE AQUI. Las graficas usaban hexadecimales sueltos y al
+ * cambiar la paleta se quedaban con los de antes sin que nadie se diera cuenta. `tok("accent")`
+ * devuelve lo que valga hoy `--accent`, asi que tema y graficas no se pueden desincronizar.
+ */
+const tok = (n) => getComputedStyle(document.documentElement).getPropertyValue(`--${n}`).trim();
+
+/**
+ * UNA RAYA DE REFERENCIA EN LA CURVA DE DINERO.
+ *
+ * En P&L la referencia es el cero; en capital, el capital de partida. Es la unica raya que importa:
+ * sin ella el ojo no sabe si la curva esta por encima o por debajo de donde empezo.
+ *
+ * Va como plugin y no como color de rejilla porque pintarla con la rejilla exige que una marca del
+ * eje caiga EXACTAMENTE en el valor, y las marcas van a numeros redondos: sobre un capital de
+ * 100.322 no cae ninguna y la raya no aparece nunca.
+ */
+const lineaReferencia = {
+  id: "lineaReferencia",
+  afterDatasetsDraw(chart, _args, opts) {
+    const y = opts?.valor;
+    if (y == null || !Number.isFinite(y)) return;
+    const { ctx, chartArea, scales } = chart;
+    const py = scales.y?.getPixelForValue(y);
+    if (py == null || py < chartArea.top || py > chartArea.bottom) return;
+    ctx.save();
+    ctx.setLineDash([4, 5]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(148,163,184,.45)";
+    ctx.beginPath();
+    ctx.moveTo(chartArea.left, py);
+    ctx.lineTo(chartArea.right, py);
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+/** El mismo color con transparencia, para los degradados de area. */
+const tokA = (n, a) => `color-mix(in srgb, ${tok(n)} ${Math.round(a * 100)}%, transparent)`;
+
 const etDay = (iso) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 // LA HORA EN 12 HORAS, con am/pm en minuscula. Peticion suya del 14/10/2026: "cuando son las
 // 13:00 es la 1 pm, y asi, no uses mas ese formato de 24h".
@@ -534,8 +573,37 @@ function computeStats(todas, desde) {
   };
 }
 
-function kpi(label, value, sub = "", klass = "") {
-  return `<div class="card kpi"><h3>${label}</h3><div class="v num ${klass}">${value}</div><div class="s">${sub}</div></div>`;
+function kpi(label, value, sub = "", klass = "", anillo = "") {
+  return `<div class="card kpi">${anillo}<div class="txt"><h3>${label}</h3>
+    <div class="v num ${klass}">${value}</div><div class="s">${sub}</div></div></div>`;
+}
+
+/**
+ * EL RELOJ DE PROGRESO. Un anillo SVG de trazo fino, con su pista detras y el numero dentro.
+ *
+ * SOLO PARA MAGNITUDES ACOTADAS, y esto no es un capricho: una aguja necesita un maximo. Un
+ * porcentaje de acierto va de 0 a 100 y el anillo dice algo. El P&L no tiene techo, asi que
+ * ponerle un reloj seria inventarse una escala — esas cifras se quedan como numero grande.
+ *
+ * `pct` puede venir null (todavia no hay nada cerrado): entonces se pinta la pista sola, sin arco.
+ * No se pinta un cero, que no es lo mismo que "no hay dato".
+ *
+ * VA SIN NUMERO DENTRO a proposito. La primera version lo llevaba y la tarjeta acababa diciendo
+ * "100%" dos veces, dentro del anillo y al lado en grande. El anillo es la forma; el numero, el
+ * numero. Repetirlo no añade nada y ensucia.
+ */
+function anillo(pct, colorTok = "accent") {
+  // 42 px y no 50: a 50 el rotulo "ACIERTO TOTAL" se quedaba sin sitio y partia en dos lineas.
+  const R = 17, C = 2 * Math.PI * R;
+  const v = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  const hueco = C * (1 - v / 100);
+  return `<svg class="anillo" width="42" height="42" viewBox="0 0 42 42" role="img"
+    aria-label="${pct == null ? "sin dato" : Math.round(v) + " por ciento"}">
+    <circle class="pista" cx="21" cy="21" r="${R}" fill="none" stroke-width="4"></circle>
+    ${pct == null ? "" : `<circle class="valor" cx="21" cy="21" r="${R}" fill="none" stroke-width="4"
+      stroke="var(--${colorTok})" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${hueco.toFixed(2)}"
+      style="filter:drop-shadow(0 0 5px color-mix(in srgb, var(--${colorTok}) 55%, transparent))"></circle>`}
+  </svg>`;
 }
 
 // ---------- vistas ----------
@@ -616,11 +684,17 @@ function kpisHTML(k) {
       k.cerradasHoy
         ? `<span class="rec-w">${k.ganadasHoy}G</span> · <span class="rec-l">${k.perdidasHoy}P</span>${k.abiertasHoy ? ` · ${k.abiertasHoy} abierta${k.abiertasHoy > 1 ? "s" : ""}` : ""}`
         : k.abiertasHoy ? `Sin cerrar aún · ${k.abiertasHoy} abierta${k.abiertasHoy > 1 ? "s" : ""}` : "Sin operaciones hoy",
+      "",
+      // El anillo se pinta del color del resultado, pero el numero y las letras G/P van al lado:
+      // el color acompaña, nunca decide solo.
+      anillo(k.winRateHoy, k.winRateHoy == null ? "muted" : k.winRateHoy >= 50 ? "green" : "red"),
     )}
     ${kpi(
       "Acierto total",
       k.winRate == null ? "—" : `${k.winRate.toFixed(0)}%`,
       k.closed ? `<span class="rec-w">${k.ganadas}G</span> · <span class="rec-l">${k.perdidas}P</span> · factor ${k.pf ? k.pf.toFixed(2) : "—"}` : "Sin histórico",
+      "",
+      anillo(k.winRate, k.winRate == null ? "muted" : k.winRate >= 50 ? "green" : "red"),
     )}
     ${kpi("Abiertas", k.open, k.open ? `Puesto ${usd(k.coste)} · vale ${usd(k.valor)}` : "Nada abierto", cls(k.unreal))}
     ${kpi("Ganancia media", usd(k.avgWin), `Pérdida media ${usd(k.avgLoss)}`)}
@@ -648,13 +722,26 @@ function viewPanel(v) {
     ? S.trades.filter((t) => t.status === "open" || etDay(t.opened_at) >= desde)
     : S.trades;
   const k = computeStats(S.trades, desde);
+  // AVANCE DE CAPITAL. Peticion suya del 24/10/2026: *"quiero ver relojes de progreso, avance de
+  // capital y graficas en lineas modernas"*.
+  //
+  // Es LA MISMA curva que habia, contada en capital en vez de en P&L. No se añade una segunda
+  // grafica al lado: el P&L acumulado y el capital son la misma linea desplazada por el capital
+  // inicial, y pintar las dos es decir lo mismo dos veces ocupando el doble.
+  //
+  // El capital inicial se deduce restando: lo que vale la cuenta hoy menos lo que lleva ganado.
+  // Si el broker no ha reportado capital todavia, no se inventa una base y se enseña el P&L.
+  const equityHoy = +(S.settings?.last_equity ?? 0);
+  const capIni = equityHoy ? equityHoy - k.total : 0;
+  const avance = capIni > 0 ? (k.total / capIni) * 100 : null;
   v.insertAdjacentHTML("beforeend", `
   <section class="grid kpis" id="kpis">${kpisHTML(k)}</section>
   <section class="card" id="abiertasPanel">${abiertasHTML(k)}</section>
   <section class="card">
-    <div class="row"><h3 style="margin:0">P&L acumulado</h3><div class="spacer"></div>
-      <span class="num ${cls(k.total)}" style="font-size:20px;font-weight:700">${usd(k.total)}</span>
-      <span class="muted sm">${k.closed} cerradas${desde ? ` · desde ${desde}` : ""}</span></div>
+    <div class="row"><h3 style="margin:0">${capIni > 0 ? "Avance de capital" : "P&L acumulado"}</h3><div class="spacer"></div>
+      <span class="num" style="font-size:23px;font-weight:700;letter-spacing:-.5px">${usd(capIni > 0 ? equityHoy : k.total)}</span>
+      ${avance == null ? "" : `<span class="badge ${avance >= 0 ? "call" : "put"}">${avance >= 0 ? "▲" : "▼"} ${Math.abs(avance).toFixed(1)}%</span>`}
+      <span class="muted sm">${capIni > 0 ? `desde ${usd(capIni)} · ` : ""}${k.closed} cerradas${desde ? ` · desde ${desde}` : ""}</span></div>
     <div class="chart-box alto"><canvas id="chEquity"></canvas></div>
   </section>
   ${esAdmin() ? `  <section class="card cal-card">
@@ -672,8 +759,8 @@ function viewPanel(v) {
   if (esAdmin()) loadCalendario();
 
   if (!window.Chart) return;
-  Chart.defaults.color = "#8b98a8";
-  Chart.defaults.borderColor = "#243040";
+  Chart.defaults.color = tok("muted");
+  Chart.defaults.borderColor = tok("line");
   Chart.defaults.font.family = "Inter";
   let acc = 0;
   const corte = S.settings?.panel_desde ?? null;
@@ -683,42 +770,59 @@ function viewPanel(v) {
   macroActivar();
   S.charts.push(new Chart($("#chEquity"), {
     type: "line",
+    plugins: [lineaReferencia],
     data: {
-      labels: closed.map((t) => etDay(t.closed_at)),
+      // El punto de partida va DELANTE. Sin el, la curva nace en la primera operacion y parece
+      // que la cuenta empezo ahi; con el, se ve de donde salio.
+      labels: ["Inicio", ...closed.map((t) => etDay(t.closed_at))],
       datasets: [{
-        data: closed.map((t) => (acc += +t.realized_pnl)), borderColor: "#f59e0b",
+        data: [capIni, ...closed.map((t) => capIni + (acc += +t.realized_pnl))], borderColor: tok("accent"),
         borderWidth: 2.5, tension: .3,
         // DEGRADADO MUY TENUE, no un area opaca. La linea sigue mandando y el cruce por el cero
         // se sigue viendo, que es lo que pidio el 20/10 al cambiar las barras por una linea.
-        fill: "origin",
+        //
+        // Y CON CAPITAL EL RELLENO VA AL PUNTO DE PARTIDA, no al cero: sobre una cuenta de 100.000
+        // un area desde el cero es un bloque solido que no dice nada. Desde el capital inicial, lo
+        // sombreado ES lo ganado, y lo que baje de ahi se ve hundirse.
+        fill: capIni > 0 ? { value: capIni } : "origin",
         backgroundColor: (c) => {
           const { ctx, chartArea } = c.chart;
           if (!chartArea) return "transparent";
           const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          g.addColorStop(0, "rgba(245,158,11,.22)");
-          g.addColorStop(1, "rgba(245,158,11,0)");
+          g.addColorStop(0, tokA("accent", 0.22));
+          g.addColorStop(1, tokA("accent", 0));
           return g;
         },
         // SOLO EL ULTIMO PUNTO. Con un punto en cada operacion la linea se convierte en un
         // collar; con uno solo, el ojo va directo a donde se esta hoy.
         pointRadius: (c) => (c.dataIndex === c.dataset.data.length - 1 ? 5 : 0),
         pointHoverRadius: 5,
-        pointBackgroundColor: "#f59e0b", pointBorderColor: "#0b0f14", pointBorderWidth: 2,
+        pointBackgroundColor: tok("accent"), pointBorderColor: tok("bg"), pointBorderWidth: 2,
       }],
     },
     options: {
       maintainAspectRatio: false,
-      // AIRE A LA IZQUIERDA. Con el eje en dolares la etiqueta mas larga ("$3,500") empieza
-      // justo en el borde del lienzo y el simbolo se come un pixel. Cuatro puntos lo arreglan.
-      layout: { padding: { left: 4, right: 8, top: 8 } },
+      // AIRE A LA IZQUIERDA. Con el eje en dolares la etiqueta mas larga empieza justo en el borde
+      // del lienzo y el simbolo se come un pixel.
+      //
+      // ERAN CUATRO PUNTOS Y SE QUEDARON CORTOS (24/10/2026): valian para "$3,500", pero al pasar
+      // la curva a CAPITAL las etiquetas son de seis cifras ("$27,000") y el dolar salia cortado
+      // como ";27,000". Doce puntos cubren ambas.
+      layout: { padding: { left: 12, right: 10, top: 8 } },
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { display: false },
+        lineaReferencia: { valor: capIni > 0 ? capIni : 0 },
         tooltip: {
           displayColors: false,
           callbacks: {
             title: (it) => it[0].label,
-            label: (it) => `Acumulado ${usd(it.parsed.y)}`,
+            label: (it) =>
+              capIni > 0
+                // En capital, el numero solo no dice nada: 100.420 no se sabe si es bueno. Al lado
+                // va lo que lleva ganado o perdido desde el punto de partida.
+                ? [`Capital ${usd(it.parsed.y)}`, `${it.parsed.y - capIni >= 0 ? "+" : "−"}${usd(Math.abs(it.parsed.y - capIni))} desde el inicio`]
+                : `Acumulado ${usd(it.parsed.y)}`,
           },
         },
       },
@@ -727,10 +831,16 @@ function viewPanel(v) {
         // y apelotona todos los puntos a la izquierda dejando medio cuadro vacio. Se veia igual con
         // las barras de antes: es un defecto que ya estaba, no lo trajo el cambio a linea.
         x: { type: "category", ticks: { maxTicksLimit: 6 } },
-        // LA RAYA DEL CERO, marcada. En una curva de dinero es la unica referencia que importa:
-        // sin ella no se ve de un vistazo si se esta arriba o abajo de donde se empezo.
+        // La rejilla, recesiva. La raya de referencia NO se pinta aqui: se dibuja con el plugin
+        // `lineaReferencia`, porque atarla a una marca del eje solo funciona si alguna cae justo
+        // en el valor, y las marcas van a numeros redondos.
         y: {
-          grid: { color: (c) => (c.tick.value === 0 ? "rgba(148,163,184,.55)" : "rgba(148,163,184,.12)") },
+          grid: { color: "rgba(148,163,184,.10)" },
+          // ANCHO MINIMO DEL EJE. Chart.js ajusta el eje a lo que miden sus etiquetas, y con la
+          // curva en capital ("$27,000") se quedaba 2 o 3 pixeles corto: el dolar salia cortado y
+          // se leia ";27,000". Subir el relleno del lienzo no lo arregla —el eje se recalcula
+          // igual—; lo que lo arregla es darle un suelo de ancho.
+          afterFit: (eje) => { eje.width = Math.max(eje.width, 76); },
           // En dolares, sin decimales: es una curva de dinero, no una serie abstracta.
           ticks: { callback: (v) => usd(v).replace(/,00$|\.00$/, "") },
         },

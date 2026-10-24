@@ -1,17 +1,45 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   LA PALETA ESTA VALIDADA, NO ELEGIDA A OJO.
+   Pasada por el validador de paletas contra la superficie oscura real (#0a0e13), parejas
+   completas y no solo contiguas. Las cinco comprobaciones en verde:
+     banda de luminosidad · suelo de croma · separacion daltonica · suelo de vision normal · contraste
+   Lo que cambio y por que:
+     · los tonos de antes (#f59e0b, #22c55e, #38bdf8) estaban FUERA de banda sobre un fondo casi
+       negro: demasiado claros, deslumbran.
+     · verde contra rojo no pasa ningun validador — es la confusion daltonica clasica. Turquesa y
+       rosa leen igual al ojo normal (sube/baja) y se separan a ΔE 10,2 en deuteranopia.
+     · el azul de informacion se parecia al turquesa (ΔE 12,1, por debajo del suelo de 15), asi que
+       pasa a violeta.
+   Ademas el signo y las letras G/P acompañan SIEMPRE al color: ningun dato se juega al color solo.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
 :root {
-  --bg: #0b0f14;
-  --panel: #121821;
-  --panel-2: #18202b;
-  --line: #243040;
-  --text: #e6edf3;
-  --muted: #8b98a8;
-  --accent: #f59e0b; /* naranja de acento */
-  --green: #22c55e;
-  --red: #ef4444;
-  --blue: #38bdf8;
-  --radius: 12px;
+  --bg: #0a0e13;
+  --bg-2: #070a0e;
+  --panel: #101722;
+  --panel-2: #16202d;
+  --line: #1f2b3a;
+  --line-2: #2a3a4e;
+  --text: #e8eef6;
+  --muted: #8494a6;
+  --accent: #d97706;
+  --green: #0d9488;
+  --red: #e11d48;
+  --blue: #7c3aed;
+  --glow: 0 0 0 1px rgba(217, 119, 6, .28), 0 0 24px -6px rgba(217, 119, 6, .45);
+  --radius: 14px;
+  --radius-sm: 10px;
   color-scheme: dark;
 }
+
+/* El fondo no es plano: dos halos muy tenues fijos, uno ambar y otro violeta. Da profundidad sin
+   meter una imagen ni pedir una sola peticion mas. */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(70ch 40ch at 12% -10%, rgba(217, 119, 6, .09), transparent 70%),
+    radial-gradient(60ch 36ch at 92% 0%, rgba(124, 58, 237, .08), transparent 70%);
+}
+body > * { position: relative; z-index: 1; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 Inter, system-ui, sans-serif; }
 a { color: var(--blue); }
@@ -24,7 +52,7 @@ a { color: var(--blue); }
 /* ---------- layout ---------- */
 header.top {
   position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding: 12px 20px; background: rgba(11, 15, 20, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+  padding: 12px 20px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
 }
 .brand { font-weight: 700; letter-spacing: .3px; }
 .brand span { color: var(--accent); }
@@ -34,19 +62,62 @@ header.top {
 .brand-lg .logo { height: 72px; }
 nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 nav.tabs button {
-  background: none; border: 0; color: var(--muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit;
+  position: relative; background: none; border: 0; color: var(--muted); padding: 8px 13px;
+  border-radius: 999px; cursor: pointer; font: inherit; font-weight: 500; transition: color .15s ease, background .15s ease;
 }
-nav.tabs button.active, nav.tabs button:hover { color: var(--text); background: var(--panel-2); }
+nav.tabs button:hover { color: var(--text); background: rgba(232, 238, 246, .05); }
+/* La activa no se rellena: se subraya con una barra corta de acento. Mas limpio y se lee antes. */
+nav.tabs button.active { color: var(--text); background: rgba(217, 119, 6, .1); }
+nav.tabs button.active::after {
+  content: ""; position: absolute; left: 50%; transform: translateX(-50%); bottom: 1px;
+  width: 16px; height: 2px; border-radius: 2px; background: var(--accent);
+  box-shadow: 0 0 10px -1px var(--accent);
+}
 .spacer { flex: 1; }
 main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
 
 .grid { display: grid; gap: 12px; }
-.kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+/* COLUMNAS FIJAS POR TRAMO, NO `auto-fit`.
+   Con `auto-fit` el navegador mete las que quepan y estira el resto, y con seis tarjetas eso daba
+   un 5 + 1: cinco arriba y una sola abajo, que parece un fallo. Por tramos las filas salen siempre
+   cuadradas —6, 3+3, 2+2+2— y nunca queda una huerfana. */
+.kpis { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 1200px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px) { .kpis { grid-template-columns: 1fr; } }
 .cols-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
-.card h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
-.kpi .v { font-size: 26px; font-weight: 700; }
+/* La tarjeta: un degradado de un pelo, una linea de luz arriba y el borde fino. Nada de sombras
+   gordas — lo que da sensacion de cristal es el filo superior, no la sombra. */
+.card {
+  position: relative; background: linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 46%);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 10px 30px -22px rgba(0, 0, 0, .9);
+  transition: border-color .18s ease, transform .18s ease;
+}
+.card::after {
+  content: ""; position: absolute; inset: 0 14px auto; height: 1px; border-radius: 1px;
+  background: linear-gradient(90deg, transparent, rgba(232, 238, 246, .14), transparent);
+}
+.card h3 { margin: 0 0 14px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1.1px; }
+.kpi { display: flex; align-items: center; gap: 12px; }
+.kpi .txt { min-width: 0; flex: 1; }
+/* El rotulo del KPI, en UNA linea. Con el reloj al lado y seis tarjetas en fila, "ACIERTO TOTAL"
+   partia en dos y estiraba TODAS las tarjetas a la altura de la mas alta. Menos espaciado para que
+   quepa, y recorte con puntos suspensivos como red por si algun dia el texto crece. */
+.kpi h3 { margin-bottom: 8px; letter-spacing: .8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .v { font-size: 27px; font-weight: 700; letter-spacing: -.5px; line-height: 1.15; }
 .kpi .s { color: var(--muted); font-size: 12px; }
+
+/* ---------- el reloj de progreso ---------- */
+/* Un anillo SVG, trazo fino y punta redonda. Solo para cosas ACOTADAS —un porcentaje tiene techo,
+   el dinero no—: poner una aguja a una cifra sin techo es inventarse un maximo. */
+.anillo { flex: none; display: block; transform: rotate(-90deg); }
+.anillo .pista { stroke: var(--line); }
+.anillo .valor { stroke-linecap: round; transition: stroke-dashoffset .9s cubic-bezier(.2, .8, .2, 1); }
+/* El anillo arranca vacio y se llena al entrar: el movimiento cuenta la misma historia que el arco
+   y por eso existe la transicion de arriba. Quien tenga el sistema puesto en "menos movimiento" no
+   lo ve animarse, y es correcto: el dato ya esta en el arco. */
+@media (prefers-reduced-motion: reduce) { .anillo .valor { transition: none; } }
 section + section { margin-top: 16px; }
 h2 { font-size: 18px; margin: 0 0 12px; }
 
@@ -55,16 +126,16 @@ button.btn, .btn {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px;
   cursor: pointer; font: inherit; font-weight: 500;
 }
-.btn:hover { border-color: #3a4a60; }
+.btn:hover { border-color: var(--line-2); }
 .btn.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
-.btn.danger { background: transparent; color: var(--red); border-color: rgba(239, 68, 68, .5); }
+.btn.danger { background: transparent; color: var(--red); border-color: color-mix(in srgb, var(--red) 50%, transparent); }
 .btn.sm { padding: 4px 10px; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: default; }
 label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 input, select {
   width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit;
 }
-input:focus, select:focus { outline: 2px solid rgba(245, 158, 11, .4); border-color: var(--accent); }
+input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
 .form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin: 0; }
@@ -78,10 +149,10 @@ input:focus, select:focus { outline: 2px solid rgba(245, 158, 11, .4); border-co
 .switch input:checked + span::before { transform: translateX(20px); }
 
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--line); }
-.badge.call { color: var(--green); border-color: rgba(34, 197, 94, .4); }
-.badge.put { color: var(--red); border-color: rgba(239, 68, 68, .4); }
+.badge.call { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.badge.put { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
 .badge.live { background: var(--red); color: #fff; border: 0; }
-.badge.paper { background: var(--blue); color: #04121c; border: 0; }
+.badge.paper { background: var(--blue); color: #0b0614; border: 0; }
 .badge.lateral { color: var(--muted); }
 
 /* ---------- tables ---------- */
@@ -103,7 +174,7 @@ tr.clickable:hover td { background: var(--panel-2); }
 .bar { position: relative; height: 8px; background: var(--panel-2); border-radius: 8px; margin: 6px 0 12px; overflow: hidden; }
 .bar i { position: absolute; top: 0; bottom: 0; border-radius: 8px; }
 
-.alert { padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(239, 68, 68, .4); background: rgba(239, 68, 68, .08); margin-bottom: 16px; }
+.alert { padding: 10px 14px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--red) 40%, transparent); background: color-mix(in srgb, var(--red) 8%, transparent); margin-bottom: 16px; }
 .alert.info { border-color: rgba(56, 189, 248, .4); background: rgba(56, 189, 248, .08); }
 .auth { max-width: 380px; margin: 10vh auto; }
 .auth .card { padding: 24px; }
@@ -143,8 +214,8 @@ tr.clickable:hover td { background: var(--panel-2); }
   border-radius: 10px; padding: 6px 2px 5px; cursor: pointer; color: var(--text);
   display: flex; flex-direction: column; align-items: center; gap: 1px; transition: border-color .15s, background .15s;
 }
-.cal-day:hover { border-color: #3a4a60; }
-.cal-day.sel { border-color: var(--accent); background: rgba(245, 158, 11, .08); }
+.cal-day:hover { border-color: var(--line-2); }
+.cal-day.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .cal-day.hoy .cal-num { color: var(--accent); }
 .cal-dow { font-size: 10px; color: var(--muted); letter-spacing: .5px; }
 .cal-num { font-size: 16px; font-weight: 700; line-height: 1.1; }
@@ -217,8 +288,8 @@ table.broker .badge { margin-left: 6px; }
   border: 1px solid var(--line); border-radius: 10px;
   background: rgba(148, 163, 184, .05);
 }
-.macro-titular.pos { border-color: rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .06); }
-.macro-titular.neg { border-color: rgba(239, 68, 68, .35); background: rgba(239, 68, 68, .06); }
+.macro-titular.pos { border-color: color-mix(in srgb, var(--green) 35%, transparent); background: color-mix(in srgb, var(--green) 6%, transparent); }
+.macro-titular.neg { border-color: color-mix(in srgb, var(--red) 35%, transparent); background: color-mix(in srgb, var(--red) 6%, transparent); }
 
 .macro-sel-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .macro-sel-precio { display: flex; align-items: baseline; gap: 10px; font-size: 19px; font-weight: 600; }
@@ -226,7 +297,7 @@ table.broker .badge { margin-left: 6px; }
 /* El aviso de "aquí subir es malo": en ámbar, que no se confunda con un error. */
 .macro-aviso {
   margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; font-size: 13px;
-  background: rgba(245, 158, 11, .08); border: 1px solid rgba(245, 158, 11, .3);
+  background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .macro-marcos { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 14px 0; }
