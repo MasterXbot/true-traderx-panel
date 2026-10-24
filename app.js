@@ -1668,7 +1668,11 @@ ${isAdmin ? `
       ${num("max_spread_pct", s.max_spread_pct ?? S.predeterminados.max_spread_pct, 1, 100, 0.5)}
       <div><label>${tx("et_expiry_mode")}</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>${tx("op_intraday_16")}</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>${tx("op_weekly_17")}</option></select></div>
       ${num("entry_wait_min", s.entry_wait_min ?? S.predeterminados.entry_wait_min, 2, 120, 1)}
-      <div><label>${tx("et_trade_style")}</label><select name="trade_style"><option value="scalp" ${(s.trade_style ?? "scalp") === "scalp" ? "selected" : ""}>${tx("op_scalp_18")}</option><option value="swing" ${s.trade_style === "swing" ? "selected" : ""}>${tx("op_swing_19")}</option></select></div>
+      <!-- EL ESTANDAR FALTABA EN ESTA LISTA, y era una mina (24/10/2026). El desplegable solo tenia
+           "scalp" y "swing", pero la base lleva "familiar" desde el 20/10. Sin una opcion que
+           coincida, el navegador enseña la primera como elegida y al guardar se escribia "scalp":
+           el Bot Familiar entero se apagaba, sin un error y sin un aviso. -->
+      <div><label>${tx("et_trade_style")}</label><select name="trade_style"><option value="familiar" ${(s.trade_style ?? "familiar") === "familiar" ? "selected" : ""}>${tx("op_familiar_20")}</option><option value="scalp" ${s.trade_style === "scalp" ? "selected" : ""}>${tx("op_scalp_18")}</option><option value="swing" ${s.trade_style === "swing" ? "selected" : ""}>${tx("op_swing_19")}</option></select></div>
       <div><label>${tx("et_order_type")}</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
       ${num("min_score", s.min_score, 0, 100, 1)}
       <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> ${tx("ck_skip_lunch")}</label>
@@ -1784,7 +1788,13 @@ ${isAdmin ? `
     patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
     patch.panel_desde = fd.get("panel_desde") || null;
     patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
-    patch.trade_style = fd.get("trade_style") === "swing" ? "swing" : "scalp";
+    // NUNCA DEGRADAR EL ESTANDAR POR OMISION. Antes esto era `=== "swing" ? "swing" : "scalp"`, o
+    // sea: cualquier cosa que no fuera "swing" acababa en "scalp". Y "scalp" apaga el Bot Familiar
+    // entero —es la unica bifurcacion que lo enciende— sin devolver ningun error.
+    // Ahora solo pasan los tres valores conocidos, y si el campo no llega o trae otra cosa se queda
+    // COMO ESTABA. Un formulario no puede cambiar de motor por descuido.
+    const estilo = String(fd.get("trade_style") ?? "");
+    patch.trade_style = ["familiar", "scalp", "swing"].includes(estilo) ? estilo : (s.trade_style ?? "familiar");
     patch.close_eod = true;
     patch.skip_lunch = fd.get("skip_lunch") === "on";
     patch.scan_skip_lunch = fd.get("scan_skip_lunch") === "on";
