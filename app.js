@@ -1729,6 +1729,102 @@ async function bindInvites() {
   list();
 }
 
+/**
+ * EL HISTORIAL DIARIO DE LAS POSICIONES DE LOS USUARIOS. Peticion suya del 24/10/2026: *"quiero
+ * que me permita ver el historial de posiciones diarias de los usuarios"*.
+ *
+ * DE DONDE SALEN LOS DATOS, y por que no hizo falta ninguna politica nueva: se lee
+ * `mis_operaciones` SIN filtrar por usuario. Esa vista acaba en `where user_id = auth.uid() or
+ * is_admin()`, asi que a un admin le devuelve las de todos y a un usuario solo las suyas. La tabla
+ * `trades` por debajo tiene RLS de solo admin; la vista es la que deja a cada usuario ver lo suyo.
+ * Si alguien quita ese `where`, este panel pasa a enseñar el dinero de todo el mundo a cualquiera.
+ *
+ * Y SE PINTA CON `tradesTable`, la misma de Historial, tambien a proposito: el 21/10 se quito de
+ * las tablas el contrato, la cantidad y el motivo de salida —incluso para el admin— porque son la
+ * receta del bot y este fichero se descarga sin cuenta. Una pantalla nueva no es excusa para
+ * devolverlos.
+ *
+ * El resumen por dia va ARRIBA y el detalle abajo: lo que el pidio es ver la forma de cada jornada
+ * de un vistazo, y la lista de operaciones sueltas no la enseña.
+ */
+function pintarHistorialUsuarios(users, ops) {
+  const nombre = (id) => {
+    const u = (users ?? []).find((x) => x.id === id);
+    return u ? (u.full_name || u.email || id.slice(0, 8)) : id.slice(0, 8);
+  };
+  if (!ops.length) {
+    $("#histUsuarios").innerHTML = `<div class="empty">Todavía no hay operaciones de ningún usuario.</div>`;
+    return;
+  }
+  const dias = [...new Set(ops.map((t) => etDay(t.opened_at)))].sort().reverse();
+  const quienes = [...new Set(ops.map((t) => t.user_id))];
+  $("#histUsuarios").innerHTML = `
+    <div class="row" style="margin-bottom:12px">
+      <select id="huUser" style="width:auto"><option value="">Todos los usuarios</option>${quienes.map((id) => `<option value="${esc(id)}">${esc(nombre(id))}</option>`).join("")}</select>
+      <select id="huDay" style="width:auto"><option value="">Todos los días</option>${dias.map((d) => `<option>${d}</option>`).join("")}</select>
+      <div class="spacer"></div><div id="huResumen" class="muted"></div>
+    </div>
+    <div id="huPorDia" style="margin-bottom:12px"></div>
+    <div id="huTabla"></div>`;
+  const draw = () => {
+    const uid = $("#huUser").value, day = $("#huDay").value;
+    const rows = ops.filter((t) => (!uid || t.user_id === uid) && (!day || etDay(t.opened_at) === day));
+    const k = computeStats(rows);
+    // Una posicion abierta suma su flotante: es dinero vivo, igual que en el resto del panel. Y el
+    // total de arriba se calcula IGUAL que la tabla de abajo a proposito: `computeStats().total`
+    // solo cuenta lo cerrado, asi que usarlo aqui dejaria dos cifras que deberian cuadrar y no
+    // cuadran en cuanto haya una posicion abierta.
+    const vivo = (t) => +t.realized_pnl + (t.status === "open" ? +(t.unrealized_pnl ?? 0) : 0);
+    const total = rows.reduce((s, t) => s + vivo(t), 0);
+    $("#huResumen").innerHTML = `${rows.length} operaciones · acierto ${k.winRate == null ? "—" : k.winRate.toFixed(0) + "%"} · P&L <span class="${cls(total)}">${usd(total)}</span>`;
+    const porDia = {};
+    for (const t of rows) {
+      const d = (porDia[etDay(t.opened_at)] ??= { n: 0, pnl: 0, ganadas: 0, cerradas: 0, abiertas: 0 });
+      d.n++;
+      d.pnl += vivo(t);
+      if (t.status === "open") d.abiertas++;
+      else { d.cerradas++; if (+t.realized_pnl > 0) d.ganadas++; }
+    }
+    const dd = Object.keys(porDia).sort().reverse();
+    $("#huPorDia").innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Día (NY)</th><th class="num">Operaciones</th><th class="num">Abiertas</th><th class="num">Acierto</th><th class="num">P&L</th></tr></thead>
+      <tbody>${dd.map((d) => {
+        const x = porDia[d];
+        return `<tr><td>${d}</td><td class="num">${x.n}</td>
+          <td class="num ${x.abiertas ? "" : "muted"}">${x.abiertas || "—"}</td>
+          <td class="num">${x.cerradas ? Math.round((100 * x.ganadas) / x.cerradas) + "%" : "—"}</td>
+          <td class="num ${cls(x.pnl)}"><b>${usd(x.pnl)}</b></td></tr>`;
+      }).join("")}</tbody></table></div>`;
+    $("#huTabla").innerHTML = tradesTable(rows);
+    bindTradeRows($("#huTabla"));
+  };
+  $("#huUser").onchange = draw;
+  $("#huDay").onchange = draw;
+  draw();
+}
+
+/**
+ * PULSAR UN USUARIO ABRE SU HISTORIAL. Peticion suya del 24/10/2026: *"al darle click a cada
+ * usuario en el panel de admin pueda ver no solo su cuenta sino tambien su historial de trading"*.
+ *
+ * Se ignoran los clics sobre el selector de rol y el interruptor de aprobado, que viven dentro de
+ * la misma fila: tocar uno de esos no es querer abrir el historial, y sin esta guarda cambiar un
+ * rol te saltaria la pantalla a otro sitio.
+ */
+function bindFilasUsuario(v) {
+  v.querySelectorAll("[data-user]").forEach((fila) => (fila.onclick = (e) => {
+    if (e.target.closest("select,input,label,button,a")) return;
+    const sel = $("#huUser");
+    if (!sel) return;
+    sel.value = fila.dataset.user;
+    // Si el usuario no tiene ni una operacion no esta en el desplegable, y asignar deja el valor
+    // en blanco: se avisa en vez de enseñar las de todos como si fueran suyas.
+    if (sel.value !== fila.dataset.user) return toast("Ese usuario todavía no tiene operaciones");
+    sel.onchange();
+    $("#histUsuarios").closest("section").scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+}
+
 async function viewAdmin(v) {
   v.insertAdjacentHTML("beforeend", `<section class="card"><h2>✉️ Invitar usuarios</h2>
     <p class="muted">Escribe el email: le llega una invitación, crea su contraseña y entra <b>ya aprobado</b>. Si el correo no sale
@@ -1741,26 +1837,33 @@ async function viewAdmin(v) {
     <div id="inviteLink"></div>
     <div id="invites" class="muted">Cargando…</div></section>
   <section class="card"><h2>Usuarios</h2><div id="users" class="muted">Cargando…</div></section>
+  <section class="card"><h2>Historial diario de posiciones</h2>
+    <p class="muted">Las operaciones de cada usuario, día a día. Pulsa un usuario en la tabla de arriba, o elígelo aquí.</p>
+    <div id="histUsuarios" class="muted">Cargando…</div></section>
   <section class="card"><h2>Alertas de seguridad y errores</h2><div id="alerts" class="muted">Cargando…</div></section>
   <section class="card"><h2>Salud del bot</h2><div id="runs" class="muted">Cargando…</div></section>`);
   if (DEMO) {
-    for (const id of ["#users", "#alerts", "#runs"]) $(id).innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`;
+    for (const id of ["#users", "#histUsuarios", "#alerts", "#runs"]) $(id).innerHTML = `<div class="empty">Disponible al conectar Supabase</div>`;
     return;
   }
   viewAlerts();
   bindInvites();
-  const [{ data: users }, { data: trades }, { data: settings }, { data: runs }] = await Promise.all([
+  const [{ data: users }, { data: trades }, { data: settings }, { data: runs }, { data: ops }] = await Promise.all([
     sb.from("profiles").select("*").order("created_at"),
     sb.from("trades").select("user_id, status, realized_pnl, unrealized_pnl").limit(10000),
     sb.from("bot_settings").select("user_id, enabled, mode, has_keys, last_equity, last_error"),
     sb.from("bot_runs").select("*").order("ts", { ascending: false }).limit(40),
+    // SIN filtrar por usuario, a proposito: `mis_operaciones` ya decide quien ve que. Ver la nota
+    // en pintarHistorialUsuarios().
+    sb.from("mis_operaciones").select("*").order("opened_at", { ascending: false }).limit(2000),
   ]);
+  pintarHistorialUsuarios(users, ops ?? []);
   $("#users").innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Usuario</th><th>Rol</th><th>Aprobado</th><th>Bot</th><th>Cuenta</th><th class="num">Capital</th><th class="num">Trades</th><th class="num">Win rate</th><th class="num">P&L</th><th>Último error</th></tr></thead>
     <tbody>${(users ?? []).map((u) => {
       const st = settings?.find((s) => s.user_id === u.id) ?? {};
       const k = computeStats((trades ?? []).filter((t) => t.user_id === u.id).map((t) => ({ ...t, opened_at: new Date().toISOString() })));
-      return `<tr>
+      return `<tr class="clickable" data-user="${esc(u.id)}" title="Pulsa para ver su historial de operaciones">
         <td><b>${esc(u.full_name)}</b><br><span class="muted">${esc(u.email)}</span></td>
         <td><select data-role="${u.id}" style="width:auto" ${u.id === S.user.id ? "disabled" : ""}><option ${u.role === "user" ? "selected" : ""}>user</option><option ${u.role === "admin" ? "selected" : ""}>admin</option></select></td>
         <td><label class="switch"><input type="checkbox" data-approve="${u.id}" ${u.approved ? "checked" : ""} ${u.id === S.user.id ? "disabled" : ""}><span></span></label></td>
@@ -1770,6 +1873,7 @@ async function viewAdmin(v) {
         <td class="num">${k.winRate == null ? "—" : k.winRate.toFixed(0) + "%"}</td><td class="num ${cls(k.total)}">${usd(k.total)}</td>
         <td class="muted" style="white-space:normal;max-width:260px">${esc(st.last_error ?? "")}</td></tr>`;
     }).join("")}</tbody></table></div>`;
+  bindFilasUsuario(v);
   v.querySelectorAll("[data-approve]").forEach((c) => (c.onchange = async () => {
     const { error } = await sb.from("profiles").update({ approved: c.checked }).eq("id", c.dataset.approve);
     toast(error ? error.message : c.checked ? "Usuario aprobado" : "Acceso revocado");
