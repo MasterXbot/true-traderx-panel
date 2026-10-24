@@ -465,10 +465,19 @@ function render() {
   // Usuarios (no admin): solo lo básico. La estrategia y la configuración son del administrador.
   const tabs = isAdmin
     ? [["panel", "Panel"], ["pos", "Posiciones"], ["hist", "Historial"], ["sig", "Señales"], ["ai", "Inteligencia"], ["cfg", "Configuración"], ["admin", "Admin"]]
-    // El usuario tiene tres sitios y ninguno cuenta cómo trabaja el bot: su panel, sus posiciones
-    // abiertas y la pantalla para conectar su broker. El historial completo queda fuera porque un
-    // listado de entradas con su hora y su activo, puesto al lado de un gráfico, es la estrategia.
-    : [["panel", "Panel"], ["pos", "Posiciones"], ["cfg", "Mi broker"]];
+    // EL USUARIO TIENE DOS SITIOS Y NADA MAS. Orden suya del 24/10/2026: *"nos aseguramos de que
+    // los usuarios nunca tengan acceso a ninguna de estas paginas, ni a configuraciones, ni a
+    // inteligencia, ni a administrador. Solamente van a tener acceso al panel, al historial y ya"*,
+    // y despues *"la pagina de posiciones tambien"*.
+    //
+    // Fuera quedan Posiciones, Señales, Inteligencia, Configuracion y Admin. El Panel ya le enseña
+    // sus posiciones abiertas, asi que no pierde el dato: pierde la pantalla.
+    : [["panel", "Panel"], ["hist", "Historial"]];
+  // CANDADO DEL ENCAMINADOR, no solo de las pestañas. Esconder un boton no impide escribir
+  // `S.tab = "admin"` en la consola y pintar la pantalla del administrador. Si la pestaña no es
+  // suya, se vuelve al Panel. Lo que protege los DATOS son las politicas de la base —esto no es la
+  // cerradura, es la puerta—, pero ademas evita que vea una pantalla vacia y crea que se rompio.
+  if (!tabs.some(([k]) => k === S.tab)) S.tab = "panel";
   if (!tabs.some(([k]) => k === S.tab)) S.tab = "panel";
 
   $("#app").innerHTML = `
