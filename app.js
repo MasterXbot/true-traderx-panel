@@ -1588,95 +1588,20 @@ ${isAdmin ? `
   <section class="card">
     <h2>${tx("ti_1")}</h2>
     <form id="riskForm" class="form">
+      <!-- SOLO LO QUE DE VERDAD SE MUEVE. Peticion suya del 24/10/2026, con su motivo:
+           *"tener todas esas configuraciones ahi se presta para que en algun momento se muevan y
+           algo empiece a funcionar mal descuidadamente"*. Y tenia razon: ese mismo dia
+           descubrimos que guardar este formulario apagaba el Bot Familiar entero.
+
+           Habia 64 campos. Quedan tres y las estrategias. El resto NO desaparece: sigue en la
+           base con el valor que gano midiendo, y se cambia por migracion —con los numeros al
+           lado— en vez de por un desplegable que se toca sin querer un martes.
+
+           EL TOPE DE CONTRATOS BAJA DE 500 A 20. Nadie va a comprar 500 contratos a proposito;
+           quinientos es la cifra que sale de un dedo resbalado. -->
+      ${num("max_contracts", s.max_contracts, 1, 20, 1)}
       ${num("alloc_pct", s.alloc_pct, 0.5, 50, 0.5)}
-      ${num("max_contracts", s.max_contracts, 1, 500, 1)}
-      ${num("max_open_positions", s.max_open_positions, 0, 20, 1)}
-      ${num("max_trades_per_day", s.max_trades_per_day, 0, 500, 1)}
-      ${num("daily_loss_limit_pct", s.daily_loss_limit_pct, 0.5, 100, 0.5)}
-      ${num("option_stop_pct", s.option_stop_pct, 5, 100, 1)}
-      ${num("min_dte", s.min_dte ?? S.predeterminados.min_dte, 0, 60, 1)}
-      ${num("delta_min", s.delta_min, 0.05, 0.95, 0.01)}
-      ${num("delta_max", s.delta_max, 0.05, 0.95, 0.01)}
-      ${num("partial_r", s.partial_r ?? S.predeterminados.partial_r, 0, 5, 0.25)}
-      ${num("stop_mult", s.stop_mult ?? S.predeterminados.stop_mult, 0.5, 2, 0.05)}
-      ${num("tp_cap_r", s.tp_cap_r ?? S.predeterminados.tp_cap_r, 0.5, 5, 0.25)}
-      ${num("be_r", s.be_r ?? S.predeterminados.be_r, 0.1, 2, 0.05)}
-      ${num("time_stop_min", s.time_stop_min ?? S.predeterminados.time_stop_min, 10, 120, 5)}
-      ${num("level_min_r", s.level_min_r ?? S.predeterminados.level_min_r, 0.05, 1, 0.05)}
-      ${num("min_profit_pct", s.min_profit_pct ?? S.predeterminados.min_profit_pct, 0, 100, 1)}
-      ${num("lock_start_pct", s.lock_start_pct ?? S.predeterminados.lock_start_pct, 0, 100, 1)}
-      ${num("lock_keep", s.lock_keep ?? S.predeterminados.lock_keep, 0.2, 0.9, 0.05)}
-      ${num("candle_trail", s.candle_trail ?? S.predeterminados.candle_trail, 0, 10, 0.5)}
-      ${num("atr_trail", s.atr_trail ?? S.predeterminados.atr_trail, 0, 5, 0.25)}
-      ${num("stop_velas", s.stop_velas ?? S.predeterminados.stop_velas, 0, 5, 1)}
-      ${num("mecha_salida", s.mecha_salida ?? S.predeterminados.mecha_salida, 0, 200, 5)}
-      ${num("mecha_desde", s.mecha_desde ?? S.predeterminados.mecha_desde, 0, 3, 0.1)}
-      ${num("lateral_pct", s.lateral_pct ?? S.predeterminados.lateral_pct, 0, 1, 0.05)}
-      ${num("entry_retest_min", s.entry_retest_min ?? S.predeterminados.entry_retest_min, 0, 30, 1)}
-      ${num("ema_stop_1m", s.ema_stop_1m ?? S.predeterminados.ema_stop_1m, 0, 60, 1)}
-      ${num("ema_stop_atr", s.ema_stop_atr ?? S.predeterminados.ema_stop_atr, 0, 2, 0.05)}
-      ${num("ema_stop_peak_r", s.ema_stop_peak_r ?? S.predeterminados.ema_stop_peak_r, 0, 2, 0.05)}
-      ${num("entry_vol_min", s.entry_vol_min ?? S.predeterminados.entry_vol_min, 0, 5, 0.1)}
-      ${num("entry_volume_min", s.entry_volume_min ?? S.predeterminados.entry_volume_min, 0, 5, 0.1)}
-      ${num("scan_open_min", s.scan_open_min ?? S.predeterminados.scan_open_min, 570, 660, 5)}
-      ${num("scan_second_min", s.scan_second_min ?? S.predeterminados.scan_second_min, 570, 660, 5)}
-      ${num("entry_last_min", s.entry_last_min ?? S.predeterminados.entry_last_min, 780, 945, 5)}
-      ${num("max_stop_premium_pct", s.max_stop_premium_pct ?? S.predeterminados.max_stop_premium_pct, 10, 100, 5)}
-      ${num("hold_volume", s.hold_volume ?? S.predeterminados.hold_volume, 0, 5, 0.1)}
-      ${num("lock_tighten", s.lock_tighten ?? S.predeterminados.lock_tighten, 0, 0.5, 0.05)}
-      ${num("exit_volume_min", s.exit_volume_min ?? S.predeterminados.exit_volume_min, 0, 3, 0.1)}
-      ${num("fade_1m", s.fade_1m ?? S.predeterminados.fade_1m, 0, 5, 0.1)}
-      ${num("peak_giveback", s.peak_giveback ?? S.predeterminados.peak_giveback, 0, 50, 1)}
-      ${num("event_block_min", s.event_block_min ?? S.predeterminados.event_block_min, 0, 120, 5)}
-      <div><label>${tx("et_panel_desde")}</label>
-        <input type="date" name="panel_desde" value="${esc(s.panel_desde ?? "")}">
-        <small class="muted">No borra nada: el historial y los agentes siguen viéndolo todo.</small></div>
-      <div><label>${tx("et_earnings_block")}</label><select name="earnings_block">
-        <option value="si" ${s.earnings_block === false ? "" : "selected"}>${tx("op_si_1")}</option>
-        <option value="no" ${s.earnings_block === false ? "selected" : ""}>${tx("op_no_2")}</option></select></div>
-      <div><label>${tx("et_structure_first")}</label><select name="structure_first">
-        <option value="si" ${s.structure_first === false ? "" : "selected"}>${tx("op_si_3")}</option>
-        <option value="no" ${s.structure_first === false ? "selected" : ""}>${tx("op_no_4")}</option></select></div>
-      <div><label>${tx("et_salida_reversion5")}</label><select name="salida_reversion5">
-        <option value="no" ${s.salida_reversion5 === false ? "selected" : ""}>${tx("op_no_5")}</option>
-        <option value="si" ${s.salida_reversion5 === false ? "" : "selected"}>${tx("op_si_6")}</option></select></div>
-      <div><label>${tx("et_salida_estructura15")}</label><select name="salida_estructura15">
-        <option value="si" ${s.salida_estructura15 === false ? "" : "selected"}>${tx("op_si_7")}</option>
-        <option value="no" ${s.salida_estructura15 === false ? "selected" : ""}>Apagada</option></select></div>
-      <div><label>${tx("et_peak_confirm")}</label><select name="peak_confirm">
-        <option value="si" ${s.peak_confirm === false ? "" : "selected"}>${tx("op_si_8")}</option>
-        <option value="no" ${s.peak_confirm === false ? "selected" : ""}>${tx("op_no_9")}</option></select></div>
-      ${num("entry_pullback_atr", s.entry_pullback_atr ?? S.predeterminados.entry_pullback_atr, 0, 2, 0.05)}
-      ${num("entry_chase_max", s.entry_chase_max ?? S.predeterminados.entry_chase_max, 0.1, 5, 0.05)}
-      <div><label>${tx("et_entry_intrabar")}</label><select name="entry_intrabar">
-        <option value="si" ${s.entry_intrabar === false ? "" : "selected"}>${tx("op_si_10")}</option>
-        <option value="no" ${s.entry_intrabar === false ? "selected" : ""}>${tx("op_no_11")}</option></select></div>
-      <div><label>${tx("et_allow_0dte")}</label><select name="allow_0dte">
-        <option value="no" ${s.allow_0dte ? "" : "selected"}>${tx("op_no_12")}</option>
-        <option value="si" ${s.allow_0dte ? "selected" : ""}>${tx("op_si_13")}</option></select></div>
-      <div><label>${tx("et_research_mode")}</label><select name="research_mode">
-        <option value="auto" ${s.research_enabled !== false && s.research_auto !== false ? "selected" : ""}>${tx("op_auto_14")}</option>
-        <option value="suggest" ${s.research_enabled !== false && s.research_auto === false ? "selected" : ""}>${tx("op_suggest_15")}</option>
-        <option value="off" ${s.research_enabled === false ? "selected" : ""}>Apagado</option></select></div>
-      ${num("dte_min", s.dte_min, 0, 30, 1)}
-      ${num("dte_max", s.dte_max, 0, 45, 1)}
-      ${num("max_spread_usd", s.max_spread_usd ?? S.predeterminados.max_spread_usd, 1, 500, 1)}
-      ${num("spread_premium_pct", s.spread_premium_pct ?? S.predeterminados.spread_premium_pct, 0, 20, 0.5)}
-      ${num("min_open_interest", s.min_open_interest ?? S.predeterminados.min_open_interest, 0, 100000, 100)}
-      ${num("min_volume", s.min_volume ?? S.predeterminados.min_volume, 0, 100000, 100)}
-      ${num("min_stop_premium_pct", s.min_stop_premium_pct ?? S.predeterminados.min_stop_premium_pct, 0, 40, 1)}
-      ${num("max_spread_pct", s.max_spread_pct ?? S.predeterminados.max_spread_pct, 1, 100, 0.5)}
-      <div><label>${tx("et_expiry_mode")}</label><select name="expiry_mode"><option value="intraday" ${(s.expiry_mode ?? "intraday") === "intraday" ? "selected" : ""}>${tx("op_intraday_16")}</option><option value="weekly" ${s.expiry_mode === "weekly" ? "selected" : ""}>${tx("op_weekly_17")}</option></select></div>
-      ${num("entry_wait_min", s.entry_wait_min ?? S.predeterminados.entry_wait_min, 2, 120, 1)}
-      <!-- EL ESTANDAR FALTABA EN ESTA LISTA, y era una mina (24/10/2026). El desplegable solo tenia
-           "scalp" y "swing", pero la base lleva "familiar" desde el 20/10. Sin una opcion que
-           coincida, el navegador enseña la primera como elegida y al guardar se escribia "scalp":
-           el Bot Familiar entero se apagaba, sin un error y sin un aviso. -->
       <div><label>${tx("et_trade_style")}</label><select name="trade_style"><option value="familiar" ${(s.trade_style ?? "familiar") === "familiar" ? "selected" : ""}>${tx("op_familiar_20")}</option><option value="scalp" ${s.trade_style === "scalp" ? "selected" : ""}>${tx("op_scalp_18")}</option><option value="swing" ${s.trade_style === "swing" ? "selected" : ""}>${tx("op_swing_19")}</option></select></div>
-      <div><label>${tx("et_order_type")}</label><select name="order_type"><option value="limit" ${(s.order_type ?? "market") === "limit" ? "selected" : ""}>LIMIT</option><option value="market" ${(s.order_type ?? "market") === "market" ? "selected" : ""}>MARKET</option></select></div>
-      ${num("min_score", s.min_score, 0, 100, 1)}
-      <div style="grid-column:1/-1"><label class="check"><input type="checkbox" name="skip_lunch" ${s.skip_lunch !== false ? "checked" : ""}> ${tx("ck_skip_lunch")}</label>
-      <label class="check"><input type="checkbox" name="scan_skip_lunch" ${s.scan_skip_lunch === true ? "checked" : ""}> ${tx("ck_scan_skip_lunch")}</label></div>
       <div style="grid-column:1/-1"><label>${tx("et_1")}</label>
         <p class="muted sm" style="margin:2px 0 8px">Marcada = el bot la busca en cada vela. Son las ${setupsElegibles().length} que sabe detectar; las que encuentra él solo se aprueban en Inteligencia, no aquí.</p>
         ${gruposSetups().length ? gruposSetups().map(([titulo, claves]) => `
@@ -1771,23 +1696,20 @@ ${isAdmin ? `
   if (isAdmin) $("#riskForm").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    // SOLO SE ESCRIBE LO QUE EL FORMULARIO ENSEÑA. Esta es la otra mitad del recorte del 24/10, y
+    // la peligrosa: antes el guardado recorria una lista fija de 52 claves con
+    // `patch[k] = Number(fd.get(k))`. Para un campo que ya NO esta en el formulario, `fd.get`
+    // devuelve null y `Number(null)` es 0 — el primer guardado habria dejado el delta en 0, el stop
+    // en 0 y los vencimientos en 0. Quitar los campos sin tocar esto habria sido mucho peor que
+    // dejarlos. Ahora, si un campo no viene, NO SE TOCA.
     const patch = {};
-    for (const k of ["alloc_pct", "max_contracts", "max_open_positions", "max_trades_per_day", "daily_loss_limit_pct", "option_stop_pct",
-      "delta_min", "delta_max", "min_dte", "dte_min", "dte_max", "max_spread_pct", "min_stop_premium_pct", "max_spread_usd", "spread_premium_pct", "min_open_interest", "min_volume", "min_score", "partial_r",
-      "stop_mult", "tp_cap_r", "be_r", "time_stop_min", "level_min_r", "min_profit_pct", "lock_start_pct", "lock_keep", "candle_trail", "ema_stop_1m", "ema_stop_atr", "ema_stop_peak_r", "entry_vol_min", "entry_volume_min", "max_stop_premium_pct", "hold_volume", "lock_tighten", "exit_volume_min", "fade_1m", "peak_giveback", "event_block_min", "entry_pullback_atr", "entry_chase_max", "entry_wait_min", "scan_open_min", "scan_second_min", "entry_last_min",
-      "atr_trail", "stop_velas", "mecha_salida", "mecha_desde", "lateral_pct", "entry_retest_min"]) patch[k] = Number(fd.get(k));
-    patch.allow_0dte = fd.get("allow_0dte") === "si";
-    patch.entry_intrabar = fd.get("entry_intrabar") !== "no";
-    patch.peak_confirm = fd.get("peak_confirm") !== "no";
-    patch.structure_first = fd.get("structure_first") !== "no";
-    patch.salida_reversion5 = fd.get("salida_reversion5") === "si";
-    patch.salida_estructura15 = fd.get("salida_estructura15") !== "no";
-    patch.earnings_block = fd.get("earnings_block") !== "no";
-    patch.research_enabled = fd.get("research_mode") !== "off";
-    patch.research_auto = fd.get("research_mode") === "auto";
-    patch.order_type = fd.get("order_type") === "market" ? "market" : "limit";
-    patch.panel_desde = fd.get("panel_desde") || null;
-    patch.expiry_mode = fd.get("expiry_mode") === "weekly" ? "weekly" : "intraday";
+    for (const k of ["max_contracts", "alloc_pct"]) {
+      const v = fd.get(k);
+      if (v === null || v === "") continue;
+      const n = Number(v);
+      if (!Number.isFinite(n)) return toast(`Revisa el campo ${k}`);
+      patch[k] = n;
+    }
     // NUNCA DEGRADAR EL ESTANDAR POR OMISION. Antes esto era `=== "swing" ? "swing" : "scalp"`, o
     // sea: cualquier cosa que no fuera "swing" acababa en "scalp". Y "scalp" apaga el Bot Familiar
     // entero —es la unica bifurcacion que lo enciende— sin devolver ningun error.
@@ -1795,15 +1717,16 @@ ${isAdmin ? `
     // COMO ESTABA. Un formulario no puede cambiar de motor por descuido.
     const estilo = String(fd.get("trade_style") ?? "");
     patch.trade_style = ["familiar", "scalp", "swing"].includes(estilo) ? estilo : (s.trade_style ?? "familiar");
-    patch.close_eod = true;
-    patch.skip_lunch = fd.get("skip_lunch") === "on";
-    patch.scan_skip_lunch = fd.get("scan_skip_lunch") === "on";
-    // Se conserva lo que NO es casilla (descubierta): el formulario no la gobierna.
-    
+    // Se conserva lo que NO es casilla (las que el bot descubrio solo): el formulario no las
+    // gobierna, asi que guardar aqui no puede borrarlas.
     const noElegibles = (s.setups ?? []).filter((k) => !setupsElegibles().includes(k));
-    patch.setups = [...fd.getAll("setup"), ...noElegibles];
-    if (patch.delta_min >= patch.delta_max) return toast("El delta mínimo debe ser menor que el máximo");
-    if (patch.dte_min > patch.dte_max) return toast("Revisa el rango de vencimiento");
+    const marcadas = fd.getAll("setup");
+    // DOS FRENOS QUE ANTES SOLO ERAN UN AVISO EN TEXTO. Si el catalogo no cargo, el formulario
+    // enseñaba un aviso en rojo... y te dejaba guardar igual la lista vacia, con lo que el bot
+    // dejaba de buscar nada. Ahora no guarda.
+    if (!gruposSetups().length) return toast("No se cargó el catálogo de estrategias: no se ha guardado nada.", 7000);
+    if (!marcadas.length && !noElegibles.length) return toast("Marca al menos una estrategia: sin ninguna, el bot no busca nada.", 7000);
+    patch.setups = [...marcadas, ...noElegibles];
     await saveSettings(patch);
     toast("Configuración guardada");
   };
