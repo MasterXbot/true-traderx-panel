@@ -123,7 +123,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
 /* El rotulo del KPI, en UNA linea. Con el reloj al lado y seis tarjetas en fila, "ACIERTO TOTAL"
    partia en dos y estiraba TODAS las tarjetas a la altura de la mas alta. Menos espaciado para que
    quepa, y recorte con puntos suspensivos como red por si algun dia el texto crece. */
-.kpi h3 { margin-bottom: 8px; letter-spacing: .8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 10px y menos espaciado: a 11px, "ACIERTO TOTAL" no cabia junto al reloj y los puntos
+   suspensivos lo dejaban en "ACIERTO TOT…", que se lee peor que la etiqueta entera. El recorte se
+   queda igualmente de red, por si algun dia el texto crece. */
+.kpi h3 { margin-bottom: 8px; font-size: 10px; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi .v { font-size: 27px; font-weight: 700; letter-spacing: -.5px; line-height: 1.15; }
 .kpi .s { color: var(--muted); font-size: 12px; }
 
