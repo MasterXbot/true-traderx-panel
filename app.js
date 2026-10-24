@@ -470,9 +470,14 @@ function render() {
     // inteligencia, ni a administrador. Solamente van a tener acceso al panel, al historial y ya"*,
     // y despues *"la pagina de posiciones tambien"*.
     //
-    // Fuera quedan Posiciones, Señales, Inteligencia, Configuracion y Admin. El Panel ya le enseña
-    // sus posiciones abiertas, asi que no pierde el dato: pierde la pantalla.
-    : [["panel", "Panel"], ["hist", "Historial"]];
+    // Fuera quedan Posiciones, Señales, Inteligencia y Admin. El Panel ya le enseña sus posiciones
+    // abiertas, asi que no pierde el dato: pierde la pantalla.
+    //
+    // "Mi broker" SE QUEDA, y es la misma pantalla de Configuracion vista por un no-admin: ahi solo
+    // se pinta el formulario del broker, y es la unica forma que tiene de conectar su cuenta. Sin
+    // ella no puede operar. Lo pidio expresamente el 24/10: *"los usuarios si tienen que tener para
+    // poder conectar su broker, pero no pueden ver ningun otro detalle"*.
+    : [["panel", "Panel"], ["hist", "Historial"], ["cfg", "Mi broker"]];
   // CANDADO DEL ENCAMINADOR, no solo de las pestañas. Esconder un boton no impide escribir
   // `S.tab = "admin"` en la consola y pintar la pantalla del administrador. Si la pestaña no es
   // suya, se vuelve al Panel. Lo que protege los DATOS son las politicas de la base —esto no es la
@@ -1044,7 +1049,7 @@ function posicionesTabla(open) {
     const puesto = +t.entry_price * 100 * +t.qty;
     return `<tr class="clickable" data-trade="${t.id}">
       <td><b>${esc(t.symbol)}</b> <span class="badge ${d > 0 ? "call" : "put"}">${t.direction}</span></td>
-      <td class="mono">${t.strike} · ${esc(t.expiry)}</td>
+      ${esAdmin() ? `<td class="mono">${t.strike} · ${esc(t.expiry)}</td>` : ""}
       <td class="num">${t.qty_open}/${t.qty}</td>
       <td class="num">${usd(t.entry_price)}</td>
       <td class="num">${bid ? usd(bid) : "—"}</td>
@@ -1061,13 +1066,19 @@ function posicionesTabla(open) {
   const pnl = open.reduce((a, t) => a + +(t.unrealized_pnl ?? 0) + +t.realized_pnl, 0);
   const puesto = open.reduce((a, t) => a + +t.entry_price * 100 * +t.qty, 0);
   return `<div class="table-wrap"><table class="broker">
-    <thead><tr><th>Activo</th><th>Contrato</th><th class="num">Cant.</th>
+    <!-- EL CONTRATO SOLO LO VE EL ADMIN (24/10/2026). "185 · 2026-10-02" parece inofensivo, y no lo
+         es: puesto al lado del precio del activo dice a que distancia del dinero compra el bot y a
+         cuantos dias de vencimiento. Son dos de los cinco filtros duros del estandar, regalados en
+         una celda. El usuario ve su dinero —lo que puso, lo que vale y lo que gana—, que es lo
+         suyo; el contrato concreto es la receta. -->
+    <thead><tr><th>Activo</th>${esAdmin() ? "<th>Contrato</th>" : ""}<th class="num">Cant.</th>
       <th class="num">Compra</th><th class="num">Venta ahora</th><th class="num">Coste</th><th class="num">Valor</th>
       <th class="num">P&L</th><th class="num">P&L %</th>
       ${esAdmin() ? '<th class="num">Stop</th><th class="num">Progreso</th>' : ""}<th></th></tr></thead>
     <tbody>${open.map(fila).join("")}</tbody>
     <tfoot><tr>
-      <td colspan="5"><b>Total (${open.length})</b></td>
+      <!-- Una columna menos cuando no es admin (se le quita Contrato), asi que el pie tambien. -->
+      <td colspan="${esAdmin() ? 5 : 4}"><b>Total (${open.length})</b></td>
       <td class="num">${usd(coste)}</td><td class="num">${usd(valor)}</td>
       <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
       <td class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
@@ -1097,7 +1108,11 @@ function tradesTable(rows, compacta = false) {
     <tbody>${rows.map((t) => {
       const pnl = t.status === "open" ? +(t.unrealized_pnl ?? 0) + +t.realized_pnl : +t.realized_pnl;
       return `<tr class="clickable" data-trade="${t.id}">
-        <td>${etDay(t.opened_at)} <span class="muted">${etTime(t.opened_at)}</span></td>
+        <!-- LA HORA EXACTA, SOLO PARA EL ADMIN (24/10/2026). Un resultado se cuenta con el dia; la
+             hora no añade nada a quien mira su dinero. Pero una lista de entradas con su minuto, a
+             lo largo de unos dias, dibuja sola que el bot entra justo al cierre de la vela de 15M.
+             Eso es como funciona el bot, no como le fue a la operacion. -->
+        <td>${etDay(t.opened_at)}${esAdmin() ? ` <span class="muted">${etTime(t.opened_at)}</span>` : ""}</td>
         <td><b>${esc(t.symbol)}</b></td>
         <td><span class="badge ${t.direction === "CALL" ? "call" : "put"}">${t.direction}</span></td>
         ${precios ? `<td class="num">${usd(t.entry_price)}</td>
