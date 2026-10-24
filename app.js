@@ -424,6 +424,39 @@ async function refrescoVivo() {
   if (antes !== huellaTrades(S.trades) || !repintarVivo()) render();
 }
 
+/**
+ * AVISA DE QUE UNA TABLA TIENE MAS A LA DERECHA.
+ *
+ * En un movil las tablas de ocho columnas no caben y se arrastran, pero una tabla cortada en seco
+ * parece una tabla rota: nada dice que haya mas. Se enciende un difuminado en el borde derecho, y
+ * se apaga solo al llegar al final para no mentir diciendo que queda algo cuando no queda.
+ */
+function marcarTablasDesplazables(raiz = document) {
+  raiz.querySelectorAll(".table-wrap").forEach((caja) => {
+    const actualizar = () => caja.classList.toggle("hay-mas", caja.scrollWidth - caja.clientWidth - caja.scrollLeft > 4);
+    if (!caja.dataset.marcada) {
+      caja.dataset.marcada = "1";
+      caja.addEventListener("scroll", actualizar, { passive: true });
+    }
+    actualizar();
+  });
+}
+
+/**
+ * Y lo vuelve a mirar cuando cambia algo. Las tablas no llegan todas al pintar: `viewAdmin` es
+ * asincrona, y los filtros del historial repintan la suya al vuelo. En vez de adivinar cuando,
+ * se observa el contenedor. Con freno de 80 ms para no recalcular en cada mutacion suelta.
+ */
+function vigilarTablas() {
+  const view = document.querySelector("#view");
+  if (!view || view.dataset.vigilada) return;
+  view.dataset.vigilada = "1";
+  let t = 0;
+  const pronto = () => { clearTimeout(t); t = setTimeout(() => marcarTablasDesplazables(view), 80); };
+  new MutationObserver(pronto).observe(view, { childList: true, subtree: true });
+  addEventListener("resize", pronto, { passive: true });
+}
+
 function render() {
   S.charts.forEach((c) => c.destroy());
   S.charts = [];
@@ -470,6 +503,8 @@ function render() {
   if (!st.has_keys) banners.push(`<div class="alert info">👋 <b>Bienvenido a True TraderX.</b> Solo te falta un paso: conecta tu broker en <b>${isAdmin ? "Configuración → Broker" : "Mi broker"}</b>. La estrategia y los stops ya vienen configurados por el administrador, y el bot se enciende solo al conectar.</div>`);
   view.insertAdjacentHTML("beforeend", banners.join(""));
   ({ panel: viewPanel, pos: viewPositions, hist: viewHistory, sig: viewSignals, ai: viewIntelligence, cfg: viewConfig, admin: viewAdmin })[S.tab](view);
+  vigilarTablas();
+  marcarTablasDesplazables(view);
 }
 
 async function toggleBot(on) {

@@ -60,7 +60,19 @@ header.top {
 .brand .logo { height: 26px; width: auto; }
 .brand-lg { font-size: 22px; flex-direction: column; justify-content: center; margin-bottom: 16px; gap: 10px; }
 .brand-lg .logo { height: 72px; }
-nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+/* UNA SOLA FILA QUE SE DESLIZA, nunca dos.
+   Con `wrap`, en un movil las siete pestañas se partian en dos filas y la cabecera crecia hasta
+   222 px: el 26% de la pantalla gastado antes de enseñar un dato. En una fila que se arrastra, las
+   que no caben se alcanzan deslizando, que es el gesto que ya hace todo el mundo en el movil.
+   En pantalla ancha caben todas, asi que no aparece ninguna barra. */
+nav.tabs {
+  display: flex; gap: 4px; flex-wrap: nowrap; min-width: 0;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scrollbar-width: none; -ms-overflow-style: none;
+  scroll-snap-type: x proximity;
+}
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { flex: none; scroll-snap-align: center; }
 nav.tabs button {
   position: relative; background: none; border: 0; color: var(--muted); padding: 8px 13px;
   border-radius: 999px; cursor: pointer; font: inherit; font-weight: 500; transition: color .15s ease, background .15s ease;
@@ -74,7 +86,10 @@ nav.tabs button.active::after {
   box-shadow: 0 0 10px -1px var(--accent);
 }
 .spacer { flex: 1; }
+/* 1200 px era el tope en cualquier pantalla: en un monitor de 1920 sobraban 720 px a los lados.
+   A partir de 1560 se ensancha, que es donde de verdad hay sitio de mas. */
 main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
+@media (min-width: 1560px) { main { max-width: 1440px; } }
 
 .grid { display: grid; gap: 12px; }
 /* COLUMNAS FIJAS POR TRAMO, NO `auto-fit`.
@@ -83,8 +98,12 @@ main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
    cuadradas —6, 3+3, 2+2+2— y nunca queda una huerfana. */
 .kpis { grid-template-columns: repeat(6, 1fr); }
 @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
+/* DOS COLUMNAS EN EL MOVIL, NO UNA. A una por fila eran seis tarjetas apiladas y habia que bajar
+   360 px solo para pasar los indicadores. A dos caben el reloj y su rotulo —comprobado: el texto
+   entra en 115 px y el anillo ocupa 42— y la pantalla rinde el doble.
+   Una sola columna se deja para moviles muy estrechos, donde dos ya aprietan de verdad. */
 @media (max-width: 700px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 420px) { .kpis { grid-template-columns: 1fr; } }
+@media (max-width: 340px) { .kpis { grid-template-columns: 1fr; } }
 .cols-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 /* La tarjeta: un degradado de un pelo, una linea de luz arriba y el borde fino. Nada de sombras
    gordas — lo que da sensacion de cristal es el filo superior, no la sombra. */
@@ -188,9 +207,62 @@ tr.clickable:hover td { background: var(--panel-2); }
 }
 .empty { text-align: center; color: var(--muted); padding: 30px; }
 
-@media (max-width: 640px) {
-  header.top { padding: 10px 16px; }
-  .kpi .v { font-size: 22px; }
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   LOS TRES TAMAÑOS. Medido en el navegador antes y despues, no a ojo.
+   La cabecera es pegajosa, asi que cada pixel suyo se descuenta de TODAS las pantallas del panel:
+   es el sitio donde apretar rinde mas.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- TABLET (hasta 1024) ---------- */
+@media (max-width: 1024px) {
+  header.top { gap: 10px; padding: 10px 14px; }
+  main { padding: 14px 12px 48px; }
+  .card { padding: 15px; }
+  section + section { margin-top: 12px; }
+  /* Las pestañas bajan a su propia linea y ocupan el ancho entero: asi la fila de arriba queda
+     solo con la marca y el estado, y las pestañas se deslizan con holgura. */
+  nav.tabs { order: 10; flex-basis: 100%; margin: 0 -14px; padding: 0 14px; }
+}
+
+/* ---------- MOVIL (hasta 700) ---------- */
+@media (max-width: 700px) {
+  header.top { gap: 8px; padding: 8px 12px; }
+  .brand .logo { height: 22px; }
+  .brand-name { font-size: 15px; }
+  nav.tabs { margin: 0 -12px; padding: 2px 12px; }
+  nav.tabs button { padding: 7px 11px; }
+  main { padding: 12px 10px 44px; }
+  .card { padding: 14px; border-radius: 12px; }
+  .grid { gap: 10px; }
+  .kpi { gap: 10px; }
+  .kpi .v { font-size: 21px; }
+  .kpi .s { font-size: 11px; }
+  h2 { font-size: 16px; }
+  /* EL CAPITAL DE LA CABECERA SE VA EN EL MOVIL. No se pierde: esta dos dedos mas abajo, en grande,
+     en la tarjeta de "Avance de capital". Repetirlo arriba costaba una fila entera de cabecera. */
+  header.top > .mono.muted { display: none; }
+  /* Celdas mas apretadas: en una tabla de ocho columnas, dos pixeles por lado son dieciseis de
+     ancho ganados, que es una columna mas que se ve sin arrastrar. */
+  th, td { padding: 7px 8px; font-size: 12.5px; }
+}
+
+/* ---------- QUE SE VEA QUE LA TABLA SE ARRASTRA ---------- */
+/* Una tabla cortada a la derecha parece una tabla rota: no hay nada que diga que hay mas. Un
+   difuminado en el borde lo dice sin texto, y se apaga solo al llegar al final. */
+.table-wrap { position: relative; }
+.table-wrap::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 34px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--panel));
+  opacity: 0; transition: opacity .2s ease;
+}
+.table-wrap.hay-mas::after { opacity: 1; }
+
+/* ---------- PC GRANDE ---------- */
+/* Con mas sitio, mas aire: el dato respira en vez de quedarse apretado en una esquina. */
+@media (min-width: 1560px) {
+  .card { padding: 20px; }
+  .grid { gap: 14px; }
+  .kpi .v { font-size: 29px; }
 }
 
 /* Contraseña con botón para verla */
