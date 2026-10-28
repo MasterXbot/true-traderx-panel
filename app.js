@@ -108,9 +108,9 @@ function toast(msg, ms = 3500) {
   clearTimeout(toast.t);
   toast.t = setTimeout(() => (t.hidden = true), ms);
 }
-async function action(body) {
+async function action(body, fn = "user-actions") {
   if (DEMO) return toast("Modo demo: conecta Supabase en config.js para operar"), null;
-  const { data, error } = await sb.functions.invoke("user-actions", { body });
+  const { data, error } = await sb.functions.invoke(fn, { body });
   if (error) {
     let msg = error.message;
     try { msg = (await error.context.json()).error ?? msg; } catch { /* sin cuerpo */ }
@@ -1481,6 +1481,10 @@ function viewPositions(v) {
 //
 // Esta tarjeta vive en Posiciones, que es solo de administrador. Un usuario no la ve.
 // =============================================================================================
+// Abrir a mano vive en SU PROPIA funcion, no en user-actions. Dos motivos, y el segundo es el
+// bueno: es la unica puerta del panel que COMPRA, y un fallo suyo no puede llevarse por delante
+// el cierre manual ni las llaves del broker, que viven en user-actions.
+const ABRIR_FN = "abrir-manual";
 const AB = { q: "", activos: [], elegido: null, vista: null, cargando: "" };
 
 function abridorHTML() {
@@ -1585,7 +1589,7 @@ function engancharAbridor(v) {
         const q = AB.q.trim();
         if (q.length < 1) { AB.activos = []; return repintar(); }
         try {
-          const r = await action({ action: "buscar_activo", q });
+          const r = await action({ action: "buscar_activo", q }, ABRIR_FN);
           AB.activos = r?.activos ?? [];
         } catch { AB.activos = []; }
         repintar();
@@ -1618,7 +1622,7 @@ function engancharAbridor(v) {
           action: "abrir_manual",
           symbol: AB.elegido.symbol,
           direction: b.dataset.abDir,
-        });
+        }, ABRIR_FN);
         AB.vista = r?.vista_previa ?? null;
       } catch (e) {
         toast("No hay contrato: " + e.message, 10000);
@@ -1646,7 +1650,7 @@ function engancharAbridor(v) {
         symbol: p.symbol,
         direction: p.direction,
         confirmar: true,
-      });
+      }, ABRIR_FN);
       const a = r?.abierta;
       toast(a ? `Abierta: ${a.contratos}x ${a.contrato} a ${usd(a.entry_price)} · objetivo +${a.take_profit_pct}%` : "Abierta", 9000);
       AB.vista = null;
