@@ -785,6 +785,11 @@ function viewPanel(v) {
   const avance = capIni > 0 ? (k.total / capIni) * 100 : null;
   v.insertAdjacentHTML("beforeend", `
   <section class="grid kpis" id="kpis">${kpisHTML(k)}</section>
+  ${/* ABRIR A MANO, en la pagina principal porque es donde el entra (peticion suya del 28/10).
+        SOLO ADMINISTRADOR: la tarjeta enseña strike, delta, horquilla y el objetivo por volumen,
+        que es justo lo que ordeno el 24/10 que un usuario no puede ver. Va debajo de los numeros
+        del dia y encima de las posiciones abiertas: primero como va la cuenta, luego que hacer. */
+    esAdmin() ? abridorHTML() : ""}
   <section class="card" id="abiertasPanel">${abiertasHTML(k)}</section>
   <section class="card">
     <div class="row"><h3 style="margin:0">${capIni > 0 ? "Avance de capital" : "P&L acumulado"}</h3><div class="spacer"></div>
@@ -805,7 +810,7 @@ function viewPanel(v) {
   ${macroTarjetaHTML()}`);
   engancharCerrar(v);
   bindTradeRows(v);
-  if (esAdmin()) loadCalendario();
+  if (esAdmin()) { engancharAbridor(v); loadCalendario(); }
 
   if (!window.Chart) return;
   Chart.defaults.color = tok("muted");
@@ -1438,14 +1443,12 @@ function listaPosHTML(open) {
 function viewPositions(v) {
   const open = S.trades.filter((t) => t.status === "open");
   v.insertAdjacentHTML("beforeend", `
-  ${abridorHTML()}
   <div class="row" style="margin-bottom:12px">
     <h2 style="margin:0">Posiciones abiertas (${open.length})</h2><div class="spacer"></div>
     ${open.length ? `<button class="btn danger" id="closeAll">🛑 Cerrar todo</button>` : ""}
   </div>
   <div id="listaPos">${listaPosHTML(open)}</div>
 `);
-  engancharAbridor(v);
   engancharCerrar(v);
   const ca = $("#closeAll");
   if (ca) ca.onclick = async () => {
@@ -1482,59 +1485,78 @@ const AB = { q: "", activos: [], elegido: null, vista: null, cargando: "" };
 
 function abridorHTML() {
   const e = AB.elegido;
-  return `<div class="card" id="abridor" style="margin-bottom:16px">
-    <div class="row" style="margin-bottom:10px">
-      <h2 style="margin:0;font-size:16px">Abrir una posición</h2>
+  return `<section class="card abrir" id="abridor">
+    <div class="row">
+      <h3 style="margin:0">Abrir una posición</h3>
       <div class="spacer"></div>
-      <span class="muted" style="font-size:12px">tú eliges el activo y la dirección · el contrato lo elige el bot</span>
+      <span class="muted sm">tú el activo y la dirección · el contrato lo elige el bot</span>
     </div>
-    <div class="row" style="gap:8px;flex-wrap:wrap">
-      <input id="abQ" placeholder="Buscar activo (AAPL, SPY, GM…)" value="${esc(AB.q)}"
-        autocomplete="off" spellcheck="false" style="flex:1;min-width:180px;text-transform:uppercase">
-      ${e ? `<span class="badge">${esc(e.symbol)}</span>` : ""}
-      <button class="btn" data-ab-dir="CALL" ${e ? "" : "disabled"}>Comprar CALL</button>
-      <button class="btn" data-ab-dir="PUT" ${e ? "" : "disabled"}>Comprar PUT</button>
+    <div class="row" style="margin-top:12px">
+      <div class="abrir-buscar">
+        <svg class="lupa" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5 21 21"></path>
+        </svg>
+        <input id="abQ" placeholder="Busca un activo: AAPL, SPY, GM…" value="${esc(AB.q)}"
+          autocomplete="off" spellcheck="false" enterkeyhint="search">
+      </div>
+      <button class="btn btn-dir call" data-ab-dir="CALL" ${e ? "" : "disabled"}>▲ Comprar CALL</button>
+      <button class="btn btn-dir put" data-ab-dir="PUT" ${e ? "" : "disabled"}>▼ Comprar PUT</button>
     </div>
-    ${e ? `<div class="muted" style="font-size:12px;margin-top:6px">${esc(e.nombre)}${e.mercado ? ` · ${esc(e.mercado)}` : ""}</div>` : ""}
-    ${AB.activos.length ? `<div id="abLista" style="margin-top:8px;display:flex;flex-direction:column;gap:2px">
-      ${AB.activos.map((a) => `<button class="btn ghost sm" data-ab-sym="${esc(a.symbol)}" style="justify-content:flex-start;text-align:left">
-        <b class="mono">${esc(a.symbol)}</b> <span class="muted">${esc(a.nombre)}</span></button>`).join("")}
-    </div>` : ""}
-    ${AB.cargando ? `<div class="muted" style="margin-top:10px">${esc(AB.cargando)}</div>` : ""}
+    ${e
+      ? `<div class="row" style="margin-top:9px;gap:9px">
+           <span class="abrir-sel">${esc(e.symbol)}</span>
+           <span class="muted sm">${esc(e.nombre)}${e.mercado ? ` · ${esc(e.mercado)}` : ""}</span>
+         </div>`
+      : AB.activos.length ? "" : `<div class="muted sm" style="margin-top:9px">Cualquier activo de EE.UU. con opciones.</div>`}
+    ${AB.activos.length
+      ? `<div class="abrir-lista">${AB.activos.map((a) =>
+          `<button data-ab-sym="${esc(a.symbol)}"><b>${esc(a.symbol)}</b><span>${esc(a.nombre)}</span></button>`).join("")}</div>`
+      : ""}
+    ${AB.cargando ? `<div class="muted sm" style="margin-top:11px">${esc(AB.cargando)}</div>` : ""}
     ${AB.vista ? vistaPreviaHTML(AB.vista) : ""}
-  </div>`;
+  </section>`;
 }
 
-/** El contrato que se compraría, antes de comprarlo. Los avisos van en rojo y arriba. */
+/**
+ * El contrato que se compraría, ANTES de comprarlo.
+ *
+ * Lo primero que se lee es lo que está mal, no lo que está bien: si el contrato va forzado, los
+ * motivos van arriba del todo y el botón cambia de palabra y de color. Él eligió "abrir igual, con
+ * aviso", y un aviso debajo del botón de comprar no es un aviso, es una nota al pie.
+ */
 function vistaPreviaHTML(p) {
-  return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-    ${p.avisos?.length ? `<div class="empty" style="border-color:var(--red);color:var(--red);text-align:left;margin-bottom:10px">
-      <b>${p.forzado ? "Este contrato NO cumple el estándar" : "Atención"}</b>
-      <ul style="margin:6px 0 0;padding-left:18px">${p.avisos.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
-    </div>` : ""}
-    <div class="row" style="margin-bottom:8px">
+  const anchaHorquilla = p.horquilla_pct_ask > 5;
+  return `<div class="abrir-previa">
+    ${p.avisos?.length
+      ? `<div class="abrir-aviso">
+           <b>${p.forzado ? "⚠ Este contrato no cumple el estándar" : "⚠ Atención"}</b>
+           <ul>${p.avisos.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+         </div>`
+      : ""}
+    <div class="row" style="margin-bottom:11px">
       <span class="sym">${esc(p.symbol)}</span>
-      <span class="badge ${p.direction === "CALL" ? "call" : "put"}">${p.direction}</span>
-      <span class="muted mono">${esc(p.contrato)}</span>
+      <span class="badge ${p.direction === "CALL" ? "call" : "put"}">${p.direction === "CALL" ? "▲" : "▼"} ${p.direction}</span>
+      <span class="muted mono sm">${esc(p.contrato)}</span>
     </div>
     <div class="stats">
       <div><small>Contratos</small><b class="num">${p.contratos}</b></div>
       <div><small>Cuesta</small><b class="num">${usd(p.coste)}</b></div>
       <div><small>Delta</small><b class="num">${p.delta.toFixed(2)}</b></div>
       <div><small>Vence en</small><b class="num">${p.dte} días</b></div>
-      <div><small>Horquilla</small><b class="num ${p.horquilla_pct_ask > 5 ? "neg" : ""}">${p.horquilla_pct_ask}% del ask</b></div>
-      <div><small>Volumen ${p.vol_ratio}x → objetivo</small><b class="num">+${p.take_profit_pct}%</b></div>
+      <div><small>Horquilla</small><b class="num ${anchaHorquilla ? "neg" : ""}">${p.horquilla_pct_ask}%${anchaHorquilla ? " ⚠" : ""}</b></div>
+      <div><small>Objetivo (volumen ${p.vol_ratio}x)</small><b class="num pos">+${p.take_profit_pct}%</b></div>
     </div>
-    <div class="muted" style="font-size:12px;margin:8px 0 10px">
-      Compra a ${usd(p.ask)}, se vende ahora a ${usd(p.bid)} · stop del −${p.stop_pct}% de la prima ·
-      invalidación del subyacente en ${p.invalidacion} · velas de ${p.fuente_velas === "tradier" ? "Tradier" : "Yahoo"}.
-      Al abrirla, el bot la gestiona y la cierra solo.
-    </div>
-    <div class="row" style="gap:8px">
-      <button class="btn ${p.forzado ? "danger" : ""}" id="abConfirmar">
+    <p class="abrir-pie">
+      Compra a ${usd(p.ask)} y ahora mismo se vende a ${usd(p.bid)} · stop del −${p.stop_pct}% de la prima ·
+      invalidación del subyacente en ${p.invalidacion} · velas de ${p.fuente_velas === "tradier" ? "Tradier" : "Yahoo"}.<br>
+      Al abrirla queda en manos del bot: la vigila y la cierra sola, y tú puedes cerrarla cuando quieras.
+    </p>
+    <div class="row">
+      <button class="btn ${p.forzado ? "danger" : "primary"}" id="abConfirmar">
         ${p.forzado ? "Abrir de todas formas" : "Confirmar compra"} · ${usd(p.coste)}
       </button>
-      <button class="btn ghost" id="abCancelar">Cancelar</button>
+      <button class="btn" id="abCancelar">Cancelar</button>
     </div>
   </div>`;
 }
@@ -2647,4 +2669,5 @@ async function pintarIA() {
     };
   }
 }
+
 
