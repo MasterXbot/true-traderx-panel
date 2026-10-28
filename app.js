@@ -1438,12 +1438,14 @@ function listaPosHTML(open) {
 function viewPositions(v) {
   const open = S.trades.filter((t) => t.status === "open");
   v.insertAdjacentHTML("beforeend", `
+  ${abridorHTML()}
   <div class="row" style="margin-bottom:12px">
     <h2 style="margin:0">Posiciones abiertas (${open.length})</h2><div class="spacer"></div>
     ${open.length ? `<button class="btn danger" id="closeAll">🛑 Cerrar todo</button>` : ""}
   </div>
   <div id="listaPos">${listaPosHTML(open)}</div>
 `);
+  engancharAbridor(v);
   engancharCerrar(v);
   const ca = $("#closeAll");
   if (ca) ca.onclick = async () => {
@@ -1456,6 +1458,180 @@ function viewPositions(v) {
       toast(`Cerradas ${ok} de ${open.length} posiciones` + (ok < open.length ? ": revisa las que quedan" : ""), 8000);
     } catch (e) {
       toast("No se pudo cerrar: " + e.message, 8000);
+    } finally {
+      if (!DEMO) { await loadAll(); render(); }
+    }
+  };
+}
+
+// =============================================================================================
+// ABRIR UNA POSICIÓN A MANO
+//
+// Petición suya del 27/10/2026: *"un buscador de todas las compañías y los botones de comprar put
+// o call, y el bot va a buscar el mejor contrato, va a abrir la posición y luego se va a poder
+// cerrar en automático o por el botón de cerrar"*.
+//
+// DOS PASOS, Y EL PRIMERO NO GASTA NADA. Él eligió "abrir igual, con aviso" cuando el contrato no
+// cumple el estándar. Un aviso que llega después de pagar no es un aviso, así que al pulsar
+// CALL/PUT no se compra: se enseña el contrato que se compraría —delta, días, horquilla, cuánto
+// cuesta, qué take profit le toca— y lo que se salta. Comprar es el segundo botón.
+//
+// Esta tarjeta vive en Posiciones, que es solo de administrador. Un usuario no la ve.
+// =============================================================================================
+const AB = { q: "", activos: [], elegido: null, vista: null, cargando: "" };
+
+function abridorHTML() {
+  const e = AB.elegido;
+  return `<div class="card" id="abridor" style="margin-bottom:16px">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin:0;font-size:16px">Abrir una posición</h2>
+      <div class="spacer"></div>
+      <span class="muted" style="font-size:12px">tú eliges el activo y la dirección · el contrato lo elige el bot</span>
+    </div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <input id="abQ" placeholder="Buscar activo (AAPL, SPY, GM…)" value="${esc(AB.q)}"
+        autocomplete="off" spellcheck="false" style="flex:1;min-width:180px;text-transform:uppercase">
+      ${e ? `<span class="badge">${esc(e.symbol)}</span>` : ""}
+      <button class="btn" data-ab-dir="CALL" ${e ? "" : "disabled"}>Comprar CALL</button>
+      <button class="btn" data-ab-dir="PUT" ${e ? "" : "disabled"}>Comprar PUT</button>
+    </div>
+    ${e ? `<div class="muted" style="font-size:12px;margin-top:6px">${esc(e.nombre)}${e.mercado ? ` · ${esc(e.mercado)}` : ""}</div>` : ""}
+    ${AB.activos.length ? `<div id="abLista" style="margin-top:8px;display:flex;flex-direction:column;gap:2px">
+      ${AB.activos.map((a) => `<button class="btn ghost sm" data-ab-sym="${esc(a.symbol)}" style="justify-content:flex-start;text-align:left">
+        <b class="mono">${esc(a.symbol)}</b> <span class="muted">${esc(a.nombre)}</span></button>`).join("")}
+    </div>` : ""}
+    ${AB.cargando ? `<div class="muted" style="margin-top:10px">${esc(AB.cargando)}</div>` : ""}
+    ${AB.vista ? vistaPreviaHTML(AB.vista) : ""}
+  </div>`;
+}
+
+/** El contrato que se compraría, antes de comprarlo. Los avisos van en rojo y arriba. */
+function vistaPreviaHTML(p) {
+  return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+    ${p.avisos?.length ? `<div class="empty" style="border-color:var(--red);color:var(--red);text-align:left;margin-bottom:10px">
+      <b>${p.forzado ? "Este contrato NO cumple el estándar" : "Atención"}</b>
+      <ul style="margin:6px 0 0;padding-left:18px">${p.avisos.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+    </div>` : ""}
+    <div class="row" style="margin-bottom:8px">
+      <span class="sym">${esc(p.symbol)}</span>
+      <span class="badge ${p.direction === "CALL" ? "call" : "put"}">${p.direction}</span>
+      <span class="muted mono">${esc(p.contrato)}</span>
+    </div>
+    <div class="stats">
+      <div><small>Contratos</small><b class="num">${p.contratos}</b></div>
+      <div><small>Cuesta</small><b class="num">${usd(p.coste)}</b></div>
+      <div><small>Delta</small><b class="num">${p.delta.toFixed(2)}</b></div>
+      <div><small>Vence en</small><b class="num">${p.dte} días</b></div>
+      <div><small>Horquilla</small><b class="num ${p.horquilla_pct_ask > 5 ? "neg" : ""}">${p.horquilla_pct_ask}% del ask</b></div>
+      <div><small>Volumen ${p.vol_ratio}x → objetivo</small><b class="num">+${p.take_profit_pct}%</b></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin:8px 0 10px">
+      Compra a ${usd(p.ask)}, se vende ahora a ${usd(p.bid)} · stop del −${p.stop_pct}% de la prima ·
+      invalidación del subyacente en ${p.invalidacion} · velas de ${p.fuente_velas === "tradier" ? "Tradier" : "Yahoo"}.
+      Al abrirla, el bot la gestiona y la cierra solo.
+    </div>
+    <div class="row" style="gap:8px">
+      <button class="btn ${p.forzado ? "danger" : ""}" id="abConfirmar">
+        ${p.forzado ? "Abrir de todas formas" : "Confirmar compra"} · ${usd(p.coste)}
+      </button>
+      <button class="btn ghost" id="abCancelar">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+function engancharAbridor(v) {
+  const caja = v.querySelector("#abridor");
+  if (!caja) return;
+  const repintar = () => {
+    const nueva = document.createElement("div");
+    nueva.innerHTML = abridorHTML();
+    caja.replaceWith(nueva.firstElementChild);
+    engancharAbridor(v);
+    const i = v.querySelector("#abQ");
+    // Devolver el foco y el cursor al final: si no, escribir la segunda letra lo saca del campo.
+    if (i && AB.foco) { i.focus(); i.selectionStart = i.selectionEnd = i.value.length; }
+  };
+
+  const input = caja.querySelector("#abQ");
+  if (input) {
+    input.oninput = () => {
+      AB.q = input.value.toUpperCase();
+      AB.foco = true;
+      clearTimeout(AB.t);
+      // 300 ms: lo justo para no pedir una búsqueda por cada tecla.
+      AB.t = setTimeout(async () => {
+        const q = AB.q.trim();
+        if (q.length < 1) { AB.activos = []; return repintar(); }
+        try {
+          const r = await action({ action: "buscar_activo", q });
+          AB.activos = r?.activos ?? [];
+        } catch { AB.activos = []; }
+        repintar();
+      }, 300);
+    };
+    input.onblur = () => { AB.foco = false; };
+  }
+
+  caja.querySelectorAll("[data-ab-sym]").forEach((b) => {
+    b.onclick = () => {
+      const sym = b.dataset.abSym;
+      AB.elegido = AB.activos.find((a) => a.symbol === sym) ?? { symbol: sym, nombre: "", mercado: "" };
+      AB.activos = [];
+      AB.q = sym;
+      AB.vista = null;
+      AB.foco = false;
+      repintar();
+    };
+  });
+
+  caja.querySelectorAll("[data-ab-dir]").forEach((b) => {
+    b.onclick = async () => {
+      if (!AB.elegido) return;
+      AB.vista = null;
+      AB.cargando = `Buscando el mejor contrato ${b.dataset.abDir} de ${AB.elegido.symbol}…`;
+      repintar();
+      try {
+        // Sin `confirmar`: esto mira, no compra.
+        const r = await action({
+          action: "abrir_manual",
+          symbol: AB.elegido.symbol,
+          direction: b.dataset.abDir,
+        });
+        AB.vista = r?.vista_previa ?? null;
+      } catch (e) {
+        toast("No hay contrato: " + e.message, 10000);
+      } finally {
+        AB.cargando = "";
+        repintar();
+      }
+    };
+  });
+
+  const can = caja.querySelector("#abCancelar");
+  if (can) can.onclick = () => { AB.vista = null; repintar(); };
+
+  const conf = caja.querySelector("#abConfirmar");
+  if (conf) conf.onclick = async () => {
+    const p = AB.vista;
+    if (!p) return;
+    if (!confirm(`¿Comprar ${p.contratos} contrato(s) ${p.direction} de ${p.symbol} por ${usd(p.coste)}?` +
+      (p.forzado ? "\n\nESTE CONTRATO NO CUMPLE EL ESTÁNDAR:\n" + p.avisos.join("\n") : ""))) return;
+    conf.disabled = true;
+    conf.textContent = "Comprando…";
+    try {
+      const r = await action({
+        action: "abrir_manual",
+        symbol: p.symbol,
+        direction: p.direction,
+        confirmar: true,
+      });
+      const a = r?.abierta;
+      toast(a ? `Abierta: ${a.contratos}x ${a.contrato} a ${usd(a.entry_price)} · objetivo +${a.take_profit_pct}%` : "Abierta", 9000);
+      AB.vista = null;
+      AB.elegido = null;
+      AB.q = "";
+    } catch (e) {
+      toast("No se pudo abrir: " + e.message, 10000);
     } finally {
       if (!DEMO) { await loadAll(); render(); }
     }
@@ -2471,3 +2647,4 @@ async function pintarIA() {
     };
   }
 }
+
