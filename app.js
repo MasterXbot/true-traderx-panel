@@ -250,7 +250,14 @@ function subscribe() {
   // Para él, un refresco cada 30 segundos hace el mismo trabajo sin enseñarle nada.
   if (S.profile?.role !== "admin") {
     clearInterval(window.__ttxRefresco);
-    window.__ttxRefresco = setInterval(() => loadAll().then(render), 30000);
+    // Mismo criterio que la via ligera: si el conjunto de operaciones no ha cambiado, solo se
+    // escriben los numeros. Antes esto hacia un `render()` entero cada 30 segundos, que destruye
+    // los graficos y vuelve a dibujar la pagina: el mismo parpadeo, mas espaciado.
+    window.__ttxRefresco = setInterval(async () => {
+      const antes = huellaTrades(S.trades);
+      await loadAll();
+      if (antes !== huellaTrades(S.trades) || !repintarVivo()) render();
+    }, 30000);
   }
   if (channel) sb.removeChannel(channel);
   let pending;
@@ -398,18 +405,78 @@ function renderNewPassword() {
 /** La huella de lo que obliga a rehacer el panel: que operaciones hay y en que estado. */
 const huellaTrades = (ts) => ts.map((x) => `${x.id}:${x.status}`).join(",");
 
+/**
+ * ESCRIBE EL NUMERO, NO REHACE EL NODO. Aqui estaba el parpadeo.
+ *
+ * La version anterior repintaba tres bloques con `innerHTML` cada segundo y medio. Reemplazar
+ * `innerHTML` destruye los nodos y crea otros, y el navegador tiene que rehacer el layout de todo
+ * el bloque: eso es el parpadeo que se veia con una posicion abierta, y de paso tiraba el foco y
+ * cualquier texto que estuviera seleccionado.
+ *
+ * Ahora se le cambia el texto a los nodos que ya existen, marcados con `data-vivo` donde se
+ * generan. Un nodo cuyo texto no ha cambiado no se toca: el navegador no repinta nada.
+ */
+function ponVivo(clave, texto, clase) {
+  const n = document.querySelector(`[data-vivo="${clave}"]`);
+  if (!n) return false;
+  // El P&L va dentro de un <b> en la tabla; se escribe en el hijo para no perderlo.
+  const dest = n.firstElementChild && n.children.length === 1 ? n.firstElementChild : n;
+  if (dest.textContent !== texto) dest.textContent = texto;
+  if (clase !== undefined) {
+    if (!n.classList.contains(clase)) {
+      n.classList.remove("pos", "neg");
+      if (clase) n.classList.add(clase);
+    }
+  }
+  return true;
+}
+
 /** Repinta solo lo que se mueve con el precio. Devuelve false si no habia nada que repintar. */
 function repintarVivo() {
   const k = computeStats(S.trades, S.settings?.panel_desde ?? null);
-  const kp = document.getElementById("kpis");
-  const ab = document.getElementById("abiertasPanel");
-  const lp = document.getElementById("listaPos");
-  if (!kp && !ab && !lp) return false;
-  if (kp) kp.innerHTML = kpisHTML(k);
-  if (ab) ab.innerHTML = abiertasHTML(k);
-  if (lp) lp.innerHTML = listaPosHTML(S.trades.filter((x) => x.status === "open"));
-  // El HTML es nuevo: sus botones necesitan volver a engancharse.
-  engancharCerrar(document);
+  const abiertas = S.trades.filter((x) => x.status === "open");
+  // Si no hay ni un nodo vivo en pantalla, esta pestaña no muestra nada de esto: que decida render.
+  if (!document.querySelector("[data-vivo]")) return false;
+
+  ponVivo("pnlHoy-v", usd(k.today), cls(k.today));
+  ponVivo("pnlTotal-v", usd(k.total), cls(k.total));
+  ponVivo("abiertas-v", String(k.open), cls(k.unreal));
+  if (k.open) ponVivo("abiertas-s", `Puesto ${usd(k.coste)} · vale ${usd(k.valor)}`);
+  ponVivo("flotante", `${usd(k.unreal)} flotante`, cls(k.unreal));
+
+  for (const t of abiertas) {
+    const d = t.direction === "CALL" ? 1 : -1;
+    const R = Math.abs(t.entry_underlying - t.init_stop_underlying) || 1;
+    const prog = t.last_underlying ? (d * (t.last_underlying - t.entry_underlying)) / R : 0;
+    const pnl = +(t.unrealized_pnl ?? 0) + +t.realized_pnl;
+    const bid = +(t.last_option_bid ?? 0);
+    const valor = bid * 100 * +t.qty_open;
+    const puesto = +t.entry_price * 100 * +t.qty;
+    const pct = puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—";
+    // Tabla del Panel.
+    ponVivo(`t${t.id}-bid`, bid ? usd(bid) : "—");
+    ponVivo(`t${t.id}-valor`, bid ? usd(valor) : "—");
+    ponVivo(`t${t.id}-pnl`, usd(pnl), cls(pnl));
+    ponVivo(`t${t.id}-pct`, pct, cls(pnl));
+    ponVivo(`t${t.id}-stop`, (+t.stop_underlying || 0).toFixed(2));
+    ponVivo(`t${t.id}-prog`, `${prog.toFixed(2)}R`, cls(prog));
+    // Fichas de la pagina Posiciones.
+    ponVivo(`c${t.id}-pnl`, usd(pnl), cls(pnl));
+    ponVivo(`c${t.id}-cv`, `${usd(t.entry_price)} → ${bid ? usd(bid) : "—"}`);
+    ponVivo(`c${t.id}-pct`, pct, cls(pnl));
+  }
+
+  // El pie de la tabla.
+  const coste = abiertas.reduce((a, t) => a + +t.entry_price * 100 * +t.qty_open, 0);
+  const valorTot = abiertas.reduce((a, t) => a + +(t.last_option_bid ?? 0) * 100 * +t.qty_open, 0);
+  const pnlTot = abiertas.reduce((a, t) => a + +(t.unrealized_pnl ?? 0) + +t.realized_pnl, 0);
+  const puestoTot = abiertas.reduce((a, t) => a + +t.entry_price * 100 * +t.qty, 0);
+  ponVivo("tot-valor", usd(valorTot));
+  ponVivo("tot-pnl", usd(pnlTot), cls(pnlTot));
+  ponVivo("tot-pct", puestoTot ? ((pnlTot / puestoTot) * 100).toFixed(1) + "%" : "—", cls(pnlTot));
+  void coste;
+
+  // Los botones NO se vuelven a enganchar: sus nodos no se han tocado, así que siguen enganchados.
   return true;
 }
 
@@ -622,9 +689,13 @@ function computeStats(todas, desde) {
   };
 }
 
-function kpi(label, value, sub = "", klass = "", anillo = "") {
+function kpi(label, value, sub = "", klass = "", anillo = "", clave = "") {
+  // `clave` marca el número y su subtítulo para que `repintarVivo()` pueda cambiar SOLO el texto,
+  // sin rehacer la tarjeta. Es lo que quita el parpadeo con una posición abierta.
+  const mv = clave ? ` data-vivo="${clave}-v"` : "";
+  const ms = clave ? ` data-vivo="${clave}-s"` : "";
   return `<div class="card kpi">${anillo}<div class="txt"><h3>${label}</h3>
-    <div class="v num ${klass}">${value}</div><div class="s">${sub}</div></div></div>`;
+    <div class="v num ${klass}"${mv}>${value}</div><div class="s"${ms}>${sub}</div></div></div>`;
 }
 
 /**
@@ -725,8 +796,8 @@ async function loadCalendario() {
 /** Los seis recuadros de arriba del Panel. Se repintan solos cuando se mueve una abierta. */
 function kpisHTML(k) {
   return `
-    ${kpi("P&L hoy", usd(k.today), `${k.tradesToday} operaciones hoy`, cls(k.today))}
-    ${kpi("P&L total", usd(k.total), `${k.closed} operaciones cerradas`, cls(k.total))}
+    ${kpi("P&L hoy", usd(k.today), `${k.tradesToday} operaciones hoy`, cls(k.today), "", "pnlHoy")}
+    ${kpi("P&L total", usd(k.total), `${k.closed} operaciones cerradas`, cls(k.total), "", "pnlTotal")}
     ${kpi(
       "Acierto hoy",
       k.winRateHoy == null ? "—" : `${k.winRateHoy.toFixed(0)}%`,
@@ -745,7 +816,7 @@ function kpisHTML(k) {
       "",
       anillo(k.winRate, k.winRate == null ? "muted" : k.winRate >= 50 ? "green" : "red"),
     )}
-    ${kpi("Abiertas", k.open, k.open ? `Puesto ${usd(k.coste)} · vale ${usd(k.valor)}` : "Nada abierto", cls(k.unreal))}
+    ${kpi("Abiertas", k.open, k.open ? `Puesto ${usd(k.coste)} · vale ${usd(k.valor)}` : "Nada abierto", cls(k.unreal), "", "abiertas")}
     ${kpi("Ganancia media", usd(k.avgWin), `Pérdida media ${usd(k.avgLoss)}`)}
 `;
 }
@@ -754,7 +825,7 @@ function kpisHTML(k) {
 function abiertasHTML(k) {
   return `
     <div class="row"><h3 style="margin:0">Posiciones abiertas (${k.open})</h3><div class="spacer"></div>
-      ${k.open ? `<span class="num ${cls(k.unreal)}" style="font-weight:700">${usd(k.unreal)} flotante</span>` : ""}</div>
+      ${k.open ? `<span class="num ${cls(k.unreal)}" style="font-weight:700" data-vivo="flotante">${usd(k.unreal)} flotante</span>` : ""}</div>
     ${posicionesTabla(S.trades.filter((t) => t.status === "open"))}
 `;
 }
@@ -1057,12 +1128,12 @@ function posicionesTabla(open) {
       ${esAdmin() ? `<td class="mono">${t.strike} · ${esc(t.expiry)}</td>` : ""}
       <td class="num">${t.qty_open}/${t.qty}</td>
       <td class="num">${usd(t.entry_price)}</td>
-      <td class="num">${bid ? usd(bid) : "—"}</td>
+      <td class="num" data-vivo="t${t.id}-bid">${bid ? usd(bid) : "—"}</td>
       <td class="num muted">${usd(coste)}</td>
-      <td class="num">${bid ? usd(valor) : "—"}</td>
-      <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
-      <td class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
-      ${esAdmin() ? `<td class="num">${(+t.stop_underlying || 0).toFixed(2)}</td><td class="num ${cls(prog)}">${prog.toFixed(2)}R</td>` : ""}
+      <td class="num" data-vivo="t${t.id}-valor">${bid ? usd(valor) : "—"}</td>
+      <td class="num ${cls(pnl)}" data-vivo="t${t.id}-pnl"><b>${usd(pnl)}</b></td>
+      <td class="num ${cls(pnl)}" data-vivo="t${t.id}-pct">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
+      ${esAdmin() ? `<td class="num" data-vivo="t${t.id}-stop">${(+t.stop_underlying || 0).toFixed(2)}</td><td class="num ${cls(prog)}" data-vivo="t${t.id}-prog">${prog.toFixed(2)}R</td>` : ""}
       <td><button class="btn danger sm" data-close="${t.id}" title="Vende todos los contratos de esta posición ahora mismo">Cerrar</button></td>
     </tr>`;
   };
@@ -1084,9 +1155,9 @@ function posicionesTabla(open) {
     <tfoot><tr>
       <!-- Una columna menos cuando no es admin (se le quita Contrato), asi que el pie tambien. -->
       <td colspan="${esAdmin() ? 5 : 4}"><b>Total (${open.length})</b></td>
-      <td class="num">${usd(coste)}</td><td class="num">${usd(valor)}</td>
-      <td class="num ${cls(pnl)}"><b>${usd(pnl)}</b></td>
-      <td class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
+      <td class="num">${usd(coste)}</td><td class="num" data-vivo="tot-valor">${usd(valor)}</td>
+      <td class="num ${cls(pnl)}" data-vivo="tot-pnl"><b>${usd(pnl)}</b></td>
+      <td class="num ${cls(pnl)}" data-vivo="tot-pct">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</td>
       ${esAdmin() ? '<td colspan="3"></td>' : '<td></td>'}
     </tr></tfoot></table></div>`;
 }
@@ -1622,14 +1693,14 @@ function posCardSimple(t) {
       <span class="badge ${d > 0 ? 'call' : 'put'}">${t.direction}</span>
       <span class="muted mono">${esc(t.option_symbol)}</span>
       <div class="spacer"></div>
-      <span class="num ${cls(pnl)}" style="font-size:18px;font-weight:700">${usd(pnl)}</span>
+      <span class="num ${cls(pnl)}" style="font-size:18px;font-weight:700" data-vivo="c${t.id}-pnl">${usd(pnl)}</span>
       <button class="btn danger sm" data-close="${t.id}">🛑 Cerrar ya</button>
     </div>
     <div class="stats">
       <div><small>Contratos</small><b class="num">${t.qty_open}/${t.qty}</b></div>
-      <div><small>Compra → venta ahora</small><b class="num">${usd(t.entry_price)} → ${bid ? usd(bid) : "—"}</b></div>
+      <div><small>Compra → venta ahora</small><b class="num" data-vivo="c${t.id}-cv">${usd(t.entry_price)} → ${bid ? usd(bid) : "—"}</b></div>
       <div><small>Puesto</small><b class="num">${usd(puesto)}</b></div>
-      <div><small>Resultado</small><b class="num ${cls(pnl)}">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</b></div>
+      <div><small>Resultado</small><b class="num ${cls(pnl)}" data-vivo="c${t.id}-pct">${puesto ? ((pnl / puesto) * 100).toFixed(1) + "%" : "—"}</b></div>
     </div>
     <div class="muted" style="font-size:12px">Vence ${esc(t.expiry)} · el bot la está gestionando y la cerrará solo.</div>
   </div>`;
