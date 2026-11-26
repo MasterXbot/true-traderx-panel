@@ -559,3 +559,7 @@ table.broker .badge { margin-left: 6px; }
 .flujo-inusual td.up { color: var(--green); }
 .flujo-inusual td.down { color: var(--red); }
 .flujo-inusual td.muted { color: var(--muted); }
+/* El barrido que de verdad abre: volumen NUEVO y lado comprador. Los demas se enseñan igual
+   -son los mayores de hoy- pero conviene distinguirlos de un vistazo. */
+.flujo-inusual tr.abre td { background: rgba(13, 148, 136, .10); }
+.flujo-inusual .abre-n { color: var(--green); }

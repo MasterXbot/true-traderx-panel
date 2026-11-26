@@ -1813,15 +1813,27 @@ function inusualHTML(f) {
   if (!lista.length) return "";
   return `<details class="flujo-inusual">
     <summary>${lista.length} barrido${lista.length === 1 ? "" : "s"} inusual${lista.length === 1 ? "" : "es"}
-      · mayor $${fMill(lista[0].usd)}</summary>
-    <table>${lista.slice(0, 6).map((x) => `<tr>
-      <td class="${x.type === "call" ? "up" : "down"}">${x.type === "call" ? "C" : "P"} ${fNum(x.strike, 0)}</td>
+      · mayor $${fMill(lista[0].usd)}${(() => {
+        const n = lista.filter((x) => x.lado === "compra" && x.volNuevo != null && x.volNuevo >= 500).length;
+        return n ? ` · <b class="abre-n">${n} abre${n === 1 ? "" : "n"}</b>` : "";
+      })()}</summary>
+    <table>${lista.slice(0, 6).map((x) => {
+      // EL QUE ABRE va marcado: volumen NUEVO de verdad y lado comprador. Los demas se enseñan
+      // igual -son los mayores barridos de hoy- pero no disparan, y conviene verlo de un vistazo
+      // en vez de deducirlo de las columnas.
+      const abre = x.lado === "compra" && x.volNuevo != null && x.volNuevo >= 500;
+      const nuevo = x.volNuevo == null
+        ? `<span class="muted">sin referencia</span>`
+        : `${Number(x.volNuevo).toLocaleString("es")} nuevos`;
+      return `<tr class="${abre ? "abre" : ""}">
+      <td class="${x.type === "call" ? "up" : "down"}">${abre ? "⚡" : ""}${x.type === "call" ? "C" : "P"} ${fNum(x.strike, 0)}</td>
       <td class="muted">${x.dte}d</td>
       <td>$${fMill(x.usd)}</td>
-      <td class="muted">${Number(x.volumen).toLocaleString("es")} vs ${Number(x.oi).toLocaleString("es")} OI</td>
+      <td class="muted">${nuevo} · ${Number(x.volumen).toLocaleString("es")} hoy vs ${Number(x.oi).toLocaleString("es")} OI</td>
       <td class="${x.lado === "compra" ? "up" : x.lado === "venta" ? "down" : "muted"}">${
         x.lado === "compra" ? "compra" : x.lado === "venta" ? "venta" : "?"}</td>
-    </tr>`).join("")}</table>
+    </tr>`;
+    }).join("")}</table>
   </details>`;
 }
 
