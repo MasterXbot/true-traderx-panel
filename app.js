@@ -1752,11 +1752,9 @@ function histoFlujoSVG(f) {
   const alto = (g) => (Math.abs(Number(g) || 0) / tope) * (H * 0.42);
 
   const spot = Number(f.spot);
-  const mov = Number(f.mov_esperado_pct);
-  const dte = Math.max(1, Number(f.mov_esperado_dte) || 1);
-  // El rango del dia: el movimiento esperado llevado a UN dia (raiz del tiempo), igual que en el
-  // filtro de entrada. Sin esto la banda seria la del vencimiento y saldria el doble de ancha.
-  const movDia = Number.isFinite(mov) ? mov / Math.sqrt(dte) : NaN;
+  // LA BANDA ES EL MOVIMIENTO DEL DIA, con su straddle de verdad (26/11/2026). Antes se cogia el
+  // del vencimiento mas cercano y se dividia por la raiz del plazo: una aproximacion.
+  const movDia = Number(f.mov_dia?.pct);
   const ref = Number(f.cierre_anterior) || spot;
   const banda = Number.isFinite(movDia) && ref > 0
     ? { a: ref * (1 - movDia / 100), b: ref * (1 + movDia / 100) }
@@ -1801,6 +1799,32 @@ function rangoFlujoHTML(f) {
   </div>`;
 }
 
+/**
+ * LOS BARRIDOS INUSUALES, con el metodo del dueño (26/11/2026): DTE ≤ 30, volumen ≥ 500, fuera del
+ * dinero, prima ≥ 250.000, y volumen > 1,2 × OI (posicion NUEVA, no cierre de una vieja). El lado
+ * sale de comparar el ultimo con el ask y el bid.
+ *
+ * **Esto es lo que el bot no tenia.** Lo que habia era la resta de la prima total entre dos fotos:
+ * decia que entraron 8M en calls, pero no si fueron trescientas operaciones pequeñas o un solo
+ * barrido, ni si alguien compro o vendio.
+ */
+function inusualHTML(f) {
+  const lista = Array.isArray(f.inusual) ? f.inusual : [];
+  if (!lista.length) return "";
+  return `<details class="flujo-inusual">
+    <summary>${lista.length} barrido${lista.length === 1 ? "" : "s"} inusual${lista.length === 1 ? "" : "es"}
+      · mayor $${fMill(lista[0].usd)}</summary>
+    <table>${lista.slice(0, 6).map((x) => `<tr>
+      <td class="${x.type === "call" ? "up" : "down"}">${x.type === "call" ? "C" : "P"} ${fNum(x.strike, 0)}</td>
+      <td class="muted">${x.dte}d</td>
+      <td>$${fMill(x.usd)}</td>
+      <td class="muted">${Number(x.volumen).toLocaleString("es")} vs ${Number(x.oi).toLocaleString("es")} OI</td>
+      <td class="${x.lado === "compra" ? "up" : x.lado === "venta" ? "down" : "muted"}">${
+        x.lado === "compra" ? "compra" : x.lado === "venta" ? "venta" : "?"}</td>
+    </tr>`).join("")}</table>
+  </details>`;
+}
+
 function fichaFlujoHTML(f) {
   const spot = Number(f.spot);
   const prev = Number(f.cierre_anterior);
@@ -1816,9 +1840,10 @@ function fichaFlujoHTML(f) {
   const mins = f.ts ? Math.round((Date.now() - Date.parse(f.ts)) / 60000) : null;
   const viejo = mins == null || mins > 6;
 
-  const mov = Number(f.mov_esperado_pct);
-  const dte = Math.max(1, Number(f.mov_esperado_dte) || 1);
-  const movDia = Number.isFinite(mov) ? mov / Math.sqrt(dte) : NaN;
+  // LOS TRES HORIZONTES, cada uno con SU straddle (26/11/2026, metodo del dueño). Antes habia uno
+  // solo y se dividia por la raiz del plazo para llevarlo al dia; eso era una aproximacion.
+  const mDia = f.mov_dia ?? null, mSem = f.mov_semana ?? null, mMes = f.mov_mes ?? null;
+  const movDia = Number(mDia?.pct);
   const pos = Number(f.posicion);
 
   const ocupado = FLUJO.cargandoSym === f.symbol;
@@ -1837,7 +1862,7 @@ function fichaFlujoHTML(f) {
     ${histoFlujoSVG(f)}
     ${rangoFlujoHTML(f)}
     <div class="flujo-cajas">
-      <div><span>Mov. esp.</span><b>${Number.isFinite(movDia) ? `+/-${movDia.toFixed(2)}%` : "n/d"}</b></div>
+      <div><span>Mov. día</span><b>${Number.isFinite(movDia) ? `+/-${movDia.toFixed(2)}%` : "n/d"}</b></div>
       <div><span>Flujo 2m</span><b class="${vc >= vp ? "up" : "down"}">${vc >= vp ? "▲" : "▼"} ${fMill(Math.max(vc, vp))}</b></div>
       <div><span>Put/Call</span><b>${fNum(f.ratio_put_call, 2)}</b></div>
       <div><span>GEX</span><b class="${gex >= 0 ? "up" : "down"}">${fMill(gex)}</b></div>
@@ -1856,7 +1881,11 @@ function fichaFlujoHTML(f) {
         ? ` · ${Math.abs(pos) > 1 ? "rompiendo" : "dentro"} del mov. esperado (${Math.abs(pos * 100).toFixed(0)}% ${pos >= 0 ? "arriba" : "abajo"})`
         : ""}
       ${tot > 0 ? `<br>Ventana de 2 min: calls $${fMill(vc)} · puts $${fMill(vp)}` : ""}
+      ${mSem || mMes
+        ? `<br>Mov. esperado: ${mSem ? `semana +/-${Number(mSem.pct).toFixed(2)}%` : ""}${mSem && mMes ? " · " : ""}${mMes ? `mes +/-${Number(mMes.pct).toFixed(2)}%` : ""}`
+        : ""}
     </div>
+    ${inusualHTML(f)}
     <div class="flujo-motivo">${veredicto} <span class="muted sm">${esc(f.motivos ?? "")}</span></div>
     <div class="flujo-botones">
       <button class="btn btn-dir call" data-fl-dir="CALL" data-fl-sym="${esc(f.symbol)}" ${ocupado ? "disabled" : ""}>▲ CALL</button>

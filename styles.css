@@ -540,3 +540,22 @@ table.broker .badge { margin-left: 6px; }
 
 .flujo-botones { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
 .flujo-botones .btn-dir { padding: 7px 13px; font-size: 12px; }
+
+/* Los barridos inusuales: plegados por defecto. En una ficha ya densa, seis filas mas abiertas
+   siempre tapan el resto; plegado se ve el titular (cuantos y el mayor) y se abre si interesa. */
+.flujo-inusual { margin-top: 9px; font-size: 11px; }
+.flujo-inusual summary {
+  cursor: pointer; color: var(--accent); font-weight: 600; list-style: none;
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+.flujo-inusual summary::-webkit-details-marker { display: none; }
+.flujo-inusual summary::before { content: "⚡ "; }
+.flujo-inusual table { width: 100%; margin-top: 7px; border-collapse: collapse; }
+.flujo-inusual td {
+  padding: 3px 5px; border-bottom: 1px solid var(--line);
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; white-space: nowrap;
+}
+.flujo-inusual td.up { color: var(--green); }
+.flujo-inusual td.down { color: var(--red); }
+.flujo-inusual td.muted { color: var(--muted); }
