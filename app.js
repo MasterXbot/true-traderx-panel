@@ -861,6 +861,10 @@ function viewPanel(v) {
         que es justo lo que ordeno el 24/10 que un usuario no puede ver. Va debajo de los numeros
         del dia y encima de las posiciones abiertas: primero como va la cuenta, luego que hacer. */
     esAdmin() ? abridorHTML() : ""}
+  ${/* LAS FICHAS DE FLUJO (26/11/2026): *"justo debajo de la pestana de comprar manualmente"*.
+        Solo administrador, igual que el abridor: llevan GEX, muros y el veredicto de los tres
+        factores, que es justo lo que ordeno el 24/10 que un usuario no puede ver. */
+    esAdmin() ? flujoHTML() : ""}
   <section class="card" id="abiertasPanel">${abiertasHTML(k)}</section>
   <section class="card">
     <div class="row"><h3 style="margin:0">${capIni > 0 ? "Avance de capital" : "P&L acumulado"}</h3><div class="spacer"></div>
@@ -881,7 +885,26 @@ function viewPanel(v) {
   ${macroTarjetaHTML()}`);
   engancharCerrar(v);
   bindTradeRows(v);
-  if (esAdmin()) { engancharAbridor(v); loadCalendario(); }
+  if (esAdmin()) {
+    engancharAbridor(v);
+    engancharFlujo(v);
+    // El flujo se pide DESPUES de pintar y se repinta solo: asi la pagina no espera por el, y una
+    // caida de esta consulta no deja el panel en blanco. El barrido escribe cada 2 minutos, asi
+    // que mirar cada 30 segundos es de sobra y no cuesta nada (27 filas).
+    const refrescaFlujo = async () => {
+      await cargarFlujo();
+      const actual = document.getElementById("flujoSec");
+      if (!actual) return;
+      const nueva = document.createElement("div");
+      nueva.innerHTML = flujoHTML();
+      actual.replaceWith(nueva.firstElementChild);
+      engancharFlujo(v);
+    };
+    refrescaFlujo();
+    clearInterval(FLUJO.t);
+    FLUJO.t = setInterval(() => { if (S.tab === "panel" && !document.hidden) refrescaFlujo(); }, 30000);
+    loadCalendario();
+  }
 
   if (!window.Chart) return;
   Chart.defaults.color = tok("muted");
@@ -1668,6 +1691,248 @@ function engancharAbridor(v) {
         toast("No se pudo abrir: " + e.message, 10000);
       } finally {
         AB.cargando = "";
+        if (!DEMO) { await loadAll(); render(); } else repintar();
+      }
+    };
+  });
+}
+
+// =============================================================================================
+// LAS FICHAS DE FLUJO EN VIVO (26/11/2026, pedido del dueño)
+// =============================================================================================
+//
+// Literal: *"quiero agregar a el panel de el bot justo debajo de la pestana de comprar manualmente
+// la seccion de flujo con las fichas en tiempo real tal como la foto con todos los datos en tiempo
+// real tal cual para poder abrir posiciones manuals tambien de hay mirando los calculos de
+// exposition y demas"*. Enseño una captura de su Radar Macro.
+//
+// DE DONDE SALEN LOS DATOS: de `gex_ultima`, una fila por activo que `cadenas` pisa en cada barrido
+// de 2 minutos. No de `gex_foto`: el histograma por strike son ~1 KB por activo, y guardarlo en
+// cada foto serian ~100 MB al mes de historia que nadie mira. El panel quiere lo de AHORA.
+//
+// LO QUE CAMBIA RESPECTO A SU CAPTURA, Y ES UNA SOLA COSA: donde su pantalla pone **IV30** esta
+// pone el **flujo de la ventana de 2 minutos**. Su propio Radar da IV30 como `n/d` en las cuatro
+// fichas de la captura, asi que seria una casilla vacia siempre; y el flujo de la ventana es
+// justamente el numero que abre las posiciones. Todo lo demas va igual.
+//
+// Y LO QUE AÑADE: el veredicto de los tres factores con su motivo, y los botones de comprar. Que
+// es para lo que la pidio.
+
+const FLUJO = { filas: [], cargando: false, error: "", cargandoSym: "", t: null };
+
+const fMill = (n) => {
+  const x = Number(n ?? 0);
+  if (!Number.isFinite(x)) return "—";
+  const a = Math.abs(x);
+  if (a >= 1e9) return `${(x / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${(x / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${(x / 1e3).toFixed(0)}K`;
+  return x.toFixed(0);
+};
+const fNum = (n, d = 2) => (Number.isFinite(Number(n)) ? Number(n).toFixed(d) : "n/d");
+
+/**
+ * EL HISTOGRAMA POR STRIKE, en SVG. Una barra por strike, verde arriba y roja abajo, con la banda
+ * del movimiento esperado sombreada y la linea del precio encima. Es el dibujo de su captura.
+ *
+ * Va en SVG inline y no en Chart.js —que el panel ya carga— a proposito: son 60 barras sin ejes ni
+ * leyenda ni interaccion, y montar un Chart por ficha serian 27 lienzos vivos repintandose cada
+ * 30 segundos en un telefono.
+ */
+function histoFlujoSVG(f) {
+  const barras = Array.isArray(f.por_strike) ? f.por_strike : [];
+  const W = 320, H = 118;
+  if (!barras.length) return `<div class="flujo-histo vacio">sin cadena todavía</div>`;
+  const ks = barras.map((b) => Number(b.k));
+  const min = Math.min(...ks), max = Math.max(...ks);
+  const span = max - min || 1;
+  const x = (k) => ((Number(k) - min) / span) * (W - 8) + 4;
+  const tope = Math.max(...barras.map((b) => Math.abs(Number(b.g) || 0)), 1);
+  const y0 = H * 0.52;
+  const alto = (g) => (Math.abs(Number(g) || 0) / tope) * (H * 0.42);
+
+  const spot = Number(f.spot);
+  const mov = Number(f.mov_esperado_pct);
+  const dte = Math.max(1, Number(f.mov_esperado_dte) || 1);
+  // El rango del dia: el movimiento esperado llevado a UN dia (raiz del tiempo), igual que en el
+  // filtro de entrada. Sin esto la banda seria la del vencimiento y saldria el doble de ancha.
+  const movDia = Number.isFinite(mov) ? mov / Math.sqrt(dte) : NaN;
+  const ref = Number(f.cierre_anterior) || spot;
+  const banda = Number.isFinite(movDia) && ref > 0
+    ? { a: ref * (1 - movDia / 100), b: ref * (1 + movDia / 100) }
+    : null;
+
+  const piezas = [];
+  if (banda) {
+    const xa = Math.max(0, x(banda.a)), xb = Math.min(W, x(banda.b));
+    if (xb > xa) piezas.push(`<rect x="${xa.toFixed(1)}" y="2" width="${(xb - xa).toFixed(1)}" height="${H - 4}" fill="rgba(132,148,166,.13)" rx="3"/>`);
+  }
+  piezas.push(`<line x1="0" y1="${y0}" x2="${W}" y2="${y0}" stroke="rgba(225,29,72,.35)" stroke-width="1" stroke-dasharray="3 3"/>`);
+  for (const b of barras) {
+    const g = Number(b.g) || 0;
+    const h = Math.max(1, alto(g));
+    const xx = x(b.k).toFixed(1);
+    const color = g >= 0 ? "var(--green)" : "var(--red)";
+    piezas.push(`<rect x="${xx}" y="${(g >= 0 ? y0 - h : y0).toFixed(1)}" width="2.2" height="${h.toFixed(1)}" fill="${color}" opacity=".92"/>`);
+  }
+  // El flip, punteado: donde el GEX acumulado cambia de signo.
+  const flip = Number(f.flip);
+  if (Number.isFinite(flip) && flip >= min && flip <= max) {
+    piezas.push(`<line x1="${x(flip).toFixed(1)}" y1="4" x2="${x(flip).toFixed(1)}" y2="${H - 4}" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="4 3" opacity=".85"/>`);
+  }
+  // Y el precio, en blanco y encima de todo.
+  if (Number.isFinite(spot) && spot >= min && spot <= max) {
+    const xs = x(spot).toFixed(1);
+    piezas.push(`<line x1="${xs}" y1="2" x2="${xs}" y2="${H - 2}" stroke="#fff" stroke-width="1.6"/>`);
+  }
+  return `<div class="flujo-histo"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+    aria-label="GEX por strike">${piezas.join("")}</svg></div>`;
+}
+
+/** La barra de rango: del muro de puts al muro de calls, con el precio marcado. */
+function rangoFlujoHTML(f) {
+  const lo = Number(f.muro_put), hi = Number(f.muro_call), spot = Number(f.spot);
+  if (!(lo > 0) || !(hi > 0) || hi <= lo) return "";
+  const p = Math.max(0, Math.min(100, ((spot - lo) / (hi - lo)) * 100));
+  return `<div class="flujo-rango">
+    <span class="lo">${fNum(lo, 0)}</span>
+    <div class="barra"><i style="left:${p.toFixed(1)}%"></i></div>
+    <span class="hi">${fNum(hi, 0)}</span>
+  </div>`;
+}
+
+function fichaFlujoHTML(f) {
+  const spot = Number(f.spot);
+  const prev = Number(f.cierre_anterior);
+  const cambio = prev > 0 && spot > 0 ? ((spot / prev - 1) * 100) : NaN;
+  const gex = Number(f.gex_neto);
+  // GAMMA + o −: positivo aplasta el movimiento, negativo lo estira. El signo es la convencion
+  // del bot (creador de mercado corto de calls y largo de puts), la misma de `_shared/gex.ts`.
+  const gSigno = Number.isFinite(gex) ? (gex >= 0 ? "+" : "−") : "?";
+  const uc = Number(f.usd_calls) || 0, up = Number(f.usd_puts) || 0;
+  const tot = uc + up;
+  const pctCalls = tot > 0 ? (uc / tot) * 100 : 50;
+  const vc = Number(f.usd_calls_ventana) || 0, vp = Number(f.usd_puts_ventana) || 0;
+  const mins = f.ts ? Math.round((Date.now() - Date.parse(f.ts)) / 60000) : null;
+  const viejo = mins == null || mins > 6;
+
+  const mov = Number(f.mov_esperado_pct);
+  const dte = Math.max(1, Number(f.mov_esperado_dte) || 1);
+  const movDia = Number.isFinite(mov) ? mov / Math.sqrt(dte) : NaN;
+  const pos = Number(f.posicion);
+
+  const ocupado = FLUJO.cargandoSym === f.symbol;
+  const veredicto = f.pasa
+    ? `<span class="flujo-ver si">ENTRARÍA ${esc(f.dir ?? "")}</span>`
+    : `<span class="flujo-ver no">no entra</span>`;
+
+  return `<article class="card flujo-ficha">
+    <div class="flujo-cab">
+      <b class="sym">${esc(f.symbol)}</b>
+      <span class="precio num">${fNum(spot, 2)}</span>
+      ${Number.isFinite(cambio) ? `<span class="cambio ${cambio >= 0 ? "up" : "down"}">${cambio >= 0 ? "+" : ""}${cambio.toFixed(2)}%</span>` : ""}
+      <div class="spacer"></div>
+      <span class="badge gamma ${gex >= 0 ? "pos" : "neg"}">GAMMA ${gSigno}</span>
+    </div>
+    ${histoFlujoSVG(f)}
+    ${rangoFlujoHTML(f)}
+    <div class="flujo-cajas">
+      <div><span>Mov. esp.</span><b>${Number.isFinite(movDia) ? `+/-${movDia.toFixed(2)}%` : "n/d"}</b></div>
+      <div><span>Flujo 2m</span><b class="${vc >= vp ? "up" : "down"}">${vc >= vp ? "▲" : "▼"} ${fMill(Math.max(vc, vp))}</b></div>
+      <div><span>Put/Call</span><b>${fNum(f.ratio_put_call, 2)}</b></div>
+      <div><span>GEX</span><b class="${gex >= 0 ? "up" : "down"}">${fMill(gex)}</b></div>
+    </div>
+    <div class="flujo-prima">
+      <span class="c">Calls $${fMill(uc)}</span><div class="spacer"></div><span class="p">Puts $${fMill(up)}</span>
+    </div>
+    <div class="flujo-prima-barra"><i style="width:${pctCalls.toFixed(1)}%"></i></div>
+    <div class="flujo-pie">
+      <span class="punto ${viejo ? "viejo" : ""}"></span>
+      ${viejo ? `sin datos frescos` : `En vivo`}
+      ${f.muro_call ? ` · Muro calls ${fNum(f.muro_call, 0)}` : ""}
+      ${f.muro_put ? ` · Muro puts ${fNum(f.muro_put, 0)}` : ""}
+      ${f.flip == null || !Number.isFinite(Number(f.flip)) ? "" : ` · flip ${fNum(f.flip, 0)}`}
+      ${Number.isFinite(pos)
+        ? ` · ${Math.abs(pos) > 1 ? "rompiendo" : "dentro"} del mov. esperado (${Math.abs(pos * 100).toFixed(0)}% ${pos >= 0 ? "arriba" : "abajo"})`
+        : ""}
+      ${tot > 0 ? `<br>Ventana de 2 min: calls $${fMill(vc)} · puts $${fMill(vp)}` : ""}
+    </div>
+    <div class="flujo-motivo">${veredicto} <span class="muted sm">${esc(f.motivos ?? "")}</span></div>
+    <div class="flujo-botones">
+      <button class="btn btn-dir call" data-fl-dir="CALL" data-fl-sym="${esc(f.symbol)}" ${ocupado ? "disabled" : ""}>▲ CALL</button>
+      <button class="btn btn-dir put" data-fl-dir="PUT" data-fl-sym="${esc(f.symbol)}" ${ocupado ? "disabled" : ""}>▼ PUT</button>
+      <div class="spacer"></div>
+      <span class="muted sm">${ocupado ? "Comprando…" : mins == null ? "" : mins <= 0 ? "ahora" : `hace ${mins} min`}</span>
+    </div>
+  </article>`;
+}
+
+function flujoHTML() {
+  if (FLUJO.error) {
+    return `<section class="card" id="flujoSec"><div class="row"><h3 style="margin:0">Flujo en vivo</h3></div>
+      <div class="muted sm" style="margin-top:10px">${esc(FLUJO.error)}</div></section>`;
+  }
+  if (!FLUJO.filas.length) {
+    return `<section class="card" id="flujoSec"><div class="row"><h3 style="margin:0">Flujo en vivo</h3>
+      <div class="spacer"></div><span class="muted sm">el barrido escribe cada 2 minutos</span></div>
+      <div class="muted sm" style="margin-top:10px">${FLUJO.cargando ? "Cargando…" : "Todavía no hay ninguna foto. Con el mercado abierto aparecen solas."}</div></section>`;
+  }
+  // Las que ENTRARIAN primero: es lo que se mira.
+  const filas = [...FLUJO.filas].sort((a, b) =>
+    (b.pasa ? 1 : 0) - (a.pasa ? 1 : 0) || Math.abs(Number(b.gex_neto) || 0) - Math.abs(Number(a.gex_neto) || 0));
+  return `<section id="flujoSec">
+    <div class="row" style="margin:2px 0 12px">
+      <h2 style="margin:0">Flujo en vivo (${filas.length})</h2>
+      <div class="spacer"></div>
+      <span class="muted sm">GEX, muros y prima · el barrido escribe cada 2 min · los botones compran al instante</span>
+    </div>
+    <div class="grid flujo-grid">${filas.map(fichaFlujoHTML).join("")}</div>
+  </section>`;
+}
+
+async function cargarFlujo() {
+  if (!esAdmin()) return;
+  try {
+    const { data, error } = await sb.from("gex_ultima").select("*").order("symbol");
+    if (error) throw error;
+    FLUJO.filas = data ?? [];
+    FLUJO.error = "";
+  } catch (e) {
+    FLUJO.filas = [];
+    FLUJO.error = "No se pudo leer el flujo: " + e.message;
+  }
+}
+
+function engancharFlujo(v) {
+  const caja = v.querySelector("#flujoSec");
+  if (!caja) return;
+  const repintar = () => {
+    const actual = document.getElementById("flujoSec");
+    if (!actual) return;
+    const nueva = document.createElement("div");
+    nueva.innerHTML = flujoHTML();
+    actual.replaceWith(nueva.firstElementChild);
+    engancharFlujo(v);
+  };
+  caja.querySelectorAll("[data-fl-dir]").forEach((b) => {
+    b.onclick = async () => {
+      // Igual que el abridor: `cargandoSym` bloquea los botones para que un doble toque no compre
+      // dos veces. Y va por la MISMA puerta (`abrir-manual`, `confirmar: true`), no por una nueva:
+      // una segunda forma de comprar seria una segunda forma de equivocarse.
+      if (FLUJO.cargandoSym) return;
+      const sym = b.dataset.flSym, dir = b.dataset.flDir;
+      if (!confirm(`¿Comprar ${dir} de ${sym} ahora mismo?`)) return;
+      FLUJO.cargandoSym = sym;
+      repintar();
+      try {
+        const r = await action({ action: "abrir_manual", symbol: sym, direction: dir, confirmar: true }, ABRIR_FN);
+        const a = r?.abierta;
+        const avisos = a?.avisos?.length ? ` · ⚠ ${a.avisos.join("; ")}` : "";
+        toast(a ? `Abierta: ${a.contratos}x ${a.contrato} a ${usd(a.entry_price)}${avisos}` : "Abierta", 9000);
+      } catch (e) {
+        toast("No se pudo abrir: " + e.message, 10000);
+      } finally {
+        FLUJO.cargandoSym = "";
         if (!DEMO) { await loadAll(); render(); } else repintar();
       }
     };

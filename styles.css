@@ -464,3 +464,79 @@ table.broker .badge { margin-left: 6px; }
   border-top: 1px dashed color-mix(in srgb, var(--line-2) 90%, transparent);
 }
 .abrir-pie { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 9px 0 12px; }
+
+/* =============================================================================================
+   LAS FICHAS DE FLUJO EN VIVO (26/11/2026, pedido del dueño).
+   =============================================================================================
+   Replican su pantalla de Radar Macro con los colores del panel, no con los de la captura: aqui
+   el verde y el rojo ya significan algo en seis sitios mas, y dos verdes distintos en la misma
+   pagina se leen como dos cosas distintas. */
+.flujo-grid { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+.flujo-ficha { padding: 14px; }
+.flujo-cab { display: flex; align-items: baseline; gap: 9px; margin-bottom: 10px; }
+.flujo-cab .sym { font-size: 17px; font-weight: 700; color: var(--accent); letter-spacing: .3px; }
+.flujo-cab .precio { font-size: 17px; font-weight: 600; }
+.flujo-cab .cambio { font-size: 12px; font-weight: 600; }
+.flujo-cab .cambio.up { color: var(--green); }
+.flujo-cab .cambio.down { color: var(--red); }
+.badge.gamma { font-size: 10px; letter-spacing: .8px; }
+.badge.gamma.pos { color: var(--green); border-color: rgba(13, 148, 136, .45); }
+.badge.gamma.neg { color: var(--red); border-color: rgba(225, 29, 72, .45); }
+
+/* El histograma por strike. `height` fija y `preserveAspectRatio="none"`: el dibujo se estira a lo
+   ancho de la ficha sin recalcular nada en JavaScript al cambiar el tamaño de la ventana. */
+.flujo-histo { height: 108px; margin: 0 -2px 10px; }
+.flujo-histo svg { width: 100%; height: 100%; display: block; }
+.flujo-histo.vacio {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 12px; border: 1px dashed var(--line); border-radius: var(--radius-sm);
+}
+
+/* Del muro de puts al muro de calls, con el precio donde esta. */
+.flujo-rango { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; font-size: 11px; }
+.flujo-rango .lo { color: var(--red); font-weight: 600; }
+.flujo-rango .hi { color: var(--green); font-weight: 600; }
+.flujo-rango .barra {
+  position: relative; flex: 1; height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--red), #d97706, var(--green));
+}
+.flujo-rango .barra i {
+  position: absolute; top: -3px; width: 4px; height: 12px; border-radius: 2px;
+  background: #fff; transform: translateX(-2px); box-shadow: 0 0 0 1px rgba(0, 0, 0, .55);
+}
+
+.flujo-cajas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 11px; }
+.flujo-cajas > div {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 6px 7px; min-width: 0;
+}
+.flujo-cajas span { display: block; font-size: 9.5px; color: var(--muted); letter-spacing: .3px; }
+.flujo-cajas b {
+  display: block; font-size: 12.5px; font-weight: 600; margin-top: 2px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  /* Los numeros largos (un GEX de -4.42B) no pueden romper la rejilla de cuatro columnas. */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.flujo-cajas b.up { color: var(--green); }
+.flujo-cajas b.down { color: var(--red); }
+
+.flujo-prima { display: flex; font-size: 12px; font-weight: 600; margin-bottom: 5px; }
+.flujo-prima .c { color: var(--green); }
+.flujo-prima .p { color: var(--red); }
+.flujo-prima-barra { height: 5px; border-radius: 3px; background: var(--red); overflow: hidden; margin-bottom: 10px; }
+.flujo-prima-barra i { display: block; height: 100%; background: var(--green); }
+
+.flujo-pie { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.flujo-pie .punto {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); margin-right: 5px; vertical-align: middle;
+}
+.flujo-pie .punto.viejo { background: var(--muted); }
+
+.flujo-motivo { margin-top: 8px; font-size: 11px; line-height: 1.5; }
+.flujo-ver { font-weight: 700; letter-spacing: .4px; margin-right: 5px; }
+.flujo-ver.si { color: var(--green); }
+.flujo-ver.no { color: var(--muted); }
+
+.flujo-botones { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+.flujo-botones .btn-dir { padding: 7px 13px; font-size: 12px; }
