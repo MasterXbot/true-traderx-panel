@@ -563,3 +563,6 @@ table.broker .badge { margin-left: 6px; }
    -son los mayores de hoy- pero conviene distinguirlos de un vistazo. */
 .flujo-inusual tr.abre td { background: rgba(13, 148, 136, .10); }
 .flujo-inusual .abre-n { color: var(--green); }
+/* El sello de version, en la cabecera. Pequeno y apagado: esta para mirarlo cuando algo no cuadra,
+   no para leerlo todo el rato. */
+.brand .ver { font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-left: 6px; opacity: .65; }

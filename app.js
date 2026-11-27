@@ -35,6 +35,13 @@ function gruposSetups() {
 }
 
 // ---------- utilidades ----------
+/**
+ * LA VERSION DE ESTA PANTALLA, visible en la cabecera. Tiene que coincidir con el `?v=` de
+ * `index.html`: si en el telefono sale otra, es que esta sirviendo una copia guardada y lo que hay
+ * que hacer es cerrar la app del todo y volver a abrirla, no buscar el fallo en la base.
+ */
+const APP_VER = "202611271010";
+
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const usd = (n) => (n == null || isNaN(n) ? "—" : (n < 0 ? "-" : "") + "$" + Math.abs(+n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -554,7 +561,14 @@ function render() {
 
   $("#app").innerHTML = `
   <header class="top">
-    <div class="brand"><img src="logo.svg" alt="Master X" class="logo"><b class="brand-name">True Trader<span>X</span></b></div>
+    <div class="brand"><img src="logo.svg" alt="Master X" class="logo"><b class="brand-name">True Trader<span>X</span></b>
+      ${/* EL SELLO DE VERSION (27/11/2026). Nace de un rato perdido: el dueño decia que el panel no
+           ensenaba las fichas de flujo, y no habia forma de saber desde fuera si su telefono estaba
+           corriendo la version nueva o una guardada en la cache de la app instalada. Comprobe la
+           base, los permisos, el codigo publicado y el service worker —todo correcto— sin poder
+           descartar lo unico que no se ve desde aqui. Con esto se mira y se acaba la discusion. */
+        ""}<span class="ver" title="version de esta pantalla">${esc(APP_VER)}</span>
+    </div>
     <nav class="tabs">${tabs.map(([k, v]) => `<button data-tab="${k}" class="${S.tab === k ? "active" : ""}">${v}</button>`).join("")}</nav>
     <div class="spacer"></div>
     ${DEMO ? `<span class="badge">DEMO</span>` : ""}
